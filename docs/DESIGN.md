@@ -161,7 +161,38 @@ Binnit's own design — not Vault-compatible.
   usable figure, not the raw bed size.
 - Parts larger than the envelope are split on grid lines. CI must fail
   any generated part that exceeds the envelope (see `/tests` and the
-  build workflow, added in later scaffold steps).
+  build workflow).
+
+### Splitting oversized parts
+
+`src/split.py`'s `split_to_fit(part, grid_pitch_mm, bed_xy_mm=None)` is
+the interface for this: it cuts a part on lines spaced `grid_pitch_mm`
+apart (X and Y only, same as the envelope check — no stated Z/gantry
+limit to split against) into the minimal number of pieces that each fit
+`bed_xy_mm` (default `PRINT_BED_USABLE_XY_MM`), returning a `SplitPiece`
+per piece with its grid cell index and its offset back into the original
+part's coordinate frame.
+
+Two things about it are deliberately unresolved, both OPEN in
+`params.py` (see [Open items](#open-items)):
+
+- **Which grid.** The brief says "grid lines" but not which grid —
+  `GRID_PITCH_MM` (42 mm internal) or `BAY_PITCH_MM` (164 mm, where
+  interlock connectors already sit). `split_to_fit()` takes
+  `grid_pitch_mm` as a *required* argument rather than defaulting to
+  either, so nothing silently picks one. Passing
+  `params.SPLIT_GRID_PITCH_MM` (the undecided value) raises
+  `OpenParameterError`, same as any other OPEN value in this repo.
+- **What joins the pieces back together.** Current output is a flat
+  butt cut — no dowel, tab, or other joint feature. `SPLIT_JOINT_TYPE`
+  and `SPLIT_JOINT_FEATURE_SIZE_MM` are reserved placeholders for that
+  decision, not yet used by any geometry.
+
+No generator produces an oversized part yet (the only generator so far,
+the S drawer box, fits the bed). The interface is validated against a
+synthetic oversized test box in `tests/test_split.py`, and is meant to be
+wired into the case generator once that exists — likely needed for L
+(492 mm) and XL (656 mm), both over the 250 mm usable bed in width alone.
 
 ## Testing (protocol stub)
 
@@ -196,6 +227,9 @@ list in the same change.
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
 | `INTERLOCK_DOVETAIL_WIDTH_MM` | Dovetail width — tight because a 5 mm tall, 45° dovetail spreads ~10 mm wider across its height, against only a 15 mm side zone (`INTERLOCK_SIDE_ZONE_MM`) |
 | `INTERLOCK_END_OF_TRAVEL_DETENT` | Mechanism and dimensions for the end-of-travel detent |
+| `SPLIT_GRID_PITCH_MM` | Which grid an oversized-part split lands on — 42 mm internal (`GRID_PITCH_MM`) or 164 mm bay (`BAY_PITCH_MM`) pitch |
+| `SPLIT_JOINT_TYPE` | Mechanism (if any) for rejoining a split part — butt+glue, dowel, tab-and-slot, screw bosses, etc. |
+| `SPLIT_JOINT_FEATURE_SIZE_MM` | Characteristic size of whichever joint `SPLIT_JOINT_TYPE` ends up being |
 
 Also explicitly out of scope for now, per the brief, rather than open
 questions to resolve:

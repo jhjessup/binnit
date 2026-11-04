@@ -315,6 +315,39 @@ PRINT_PROFILE_NOTE = (
     "documented here for traceability to the brief."
 )
 
+# --- Splitting oversized parts (brief: "split on grid lines") ------------
+#
+# The brief says an oversized part is split on grid lines, but doesn't say
+# which grid. Binnit has two candidate pitches: the 42 mm internal
+# Gridfinity-compatible grid, and the 164 mm bay pitch (where interlock
+# connectors already sit — see interlock_connector_line_count()). Asked
+# directly, the answer was "don't know" — so this is OPEN, not defaulted,
+# and src/split.py requires a caller to pass a real value rather than
+# silently assuming one of the two.
+SPLIT_GRID_PITCH_MM = OpenParameter(
+    "SPLIT_GRID_PITCH_MM",
+    "Which grid a split must land on — the 42 mm internal pitch "
+    "(GRID_PITCH_MM) or the 164 mm bay pitch (BAY_PITCH_MM) — is not "
+    "decided. src/split.split_to_fit() takes grid_pitch_mm as a required "
+    "argument so callers must supply a real value explicitly; this name "
+    "exists so a future decision has a single place to land.",
+)
+
+# What (if anything) holds two split halves together after printing is
+# also undecided — no joint is implemented yet (current split geometry is
+# a flat butt cut). These are reserved placeholders for that decision.
+SPLIT_JOINT_TYPE = OpenParameter(
+    "SPLIT_JOINT_TYPE",
+    "Mechanism (if any) for rejoining a split part: flat butt + glue, "
+    "dowel pins, tab-and-slot, screw bosses, etc. Not decided.",
+)
+SPLIT_JOINT_FEATURE_SIZE_MM = OpenParameter(
+    "SPLIT_JOINT_FEATURE_SIZE_MM",
+    "Characteristic size (e.g. dowel diameter, tab width) of whichever "
+    "joint SPLIT_JOINT_TYPE ends up being. Not decided; has no meaning "
+    "until a joint type is chosen.",
+)
+
 
 # ---------------------------------------------------------------------------
 # Self-check — run at import time so a broken edit to this file fails loudly
