@@ -379,6 +379,21 @@ SPLIT_JOINT_CLEARANCE_MM = 0.15       # STARTING — untested starting value,
                                       # actually printing it, not trusted
                                       # as final.
 
+# Tip relief: FDM prints tend to round/bulge slightly at sharp convex
+# (outside) corners — the nozzle can't reverse direction instantly, so
+# material pools a bit at each direction change — while the matching
+# concave (inside) corner on the neighboring piece prints close to
+# nominal. Every chevron peak is exactly that pairing (one piece's
+# convex tip nesting into the other's concave notch), so a perfectly
+# sharp modeled point risks interference right at the tip even though
+# the flat faces have clearance. Fix: truncate every peak/trough into a
+# small flat (on both pieces) instead of modeling a sharp point.
+#
+# DECIDED: reuse SPLIT_JOINT_CLEARANCE_MM for this rather than inventing
+# a second, independent provisional number — both represent the same
+# underlying "how much print tolerance to allow for" judgment call.
+SPLIT_JOINT_TIP_RELIEF_MM = SPLIT_JOINT_CLEARANCE_MM
+
 
 # ---------------------------------------------------------------------------
 # Self-check — run at import time so a broken edit to this file fails loudly

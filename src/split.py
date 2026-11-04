@@ -16,8 +16,16 @@ plane itself, rather than a flat butt cut — see params.SPLIT_JOINT_TYPE
 and friends for the dimensions and reasoning. It self-aligns the two
 halves on straight-on contact (no sliding together, unlike the stacking
 interlock's dovetail — appropriate since this joint is meant to be
-glued) and multiplies the bonded surface area versus a flat cut. Pass
-`joint=False` to split_to_fit() for the old flat-cut behavior instead.
+glued) and multiplies the bonded surface area versus a flat cut. Every
+peak/trough is also truncated into a small flat by
+params.SPLIT_JOINT_TIP_RELIEF_MM, rather than modeled as a perfect sharp
+point: FDM prints tend to round/bulge slightly at sharp convex corners
+(the nozzle can't reverse direction instantly), and every chevron peak
+is exactly that convex tip on one piece nesting into the matching
+concave notch on its neighbor — truncating gives that expected
+deformation somewhere planned to go instead of an uncontrolled
+interference right at the tip. Pass `joint=False` to split_to_fit() for
+the old flat-cut behavior instead.
 
 Scope note: chevron teeth are applied independently per axis, in two
 sequential passes (split X, then split Y on each resulting column). A
@@ -90,24 +98,50 @@ def _choose_cut_positions(size_mm: float, pitch_mm: float, bed_mm: float,
 
 def _boundary_points(axis_val: float, shift: float, other_lo: float,
                       other_hi: float, zigzag: bool, feature_size: float,
-                      pitch: float) -> list[tuple[float, float]]:
+                      pitch: float, angle_deg: float,
+                      tip_relief: float) -> list[tuple[float, float]]:
     """Points tracing a boundary line (axis_coord, other_coord) from
     other_lo to other_hi. Flat at `axis_val + shift` if not zigzag;
-    otherwise a triangle wave of the given amplitude/pitch centered on
-    `axis_val + shift`."""
+    otherwise a trapezoidal wave (triangle wave with every peak/trough
+    truncated into a short flat of half-width `tip_relief / tan(angle_deg)`)
+    of the given amplitude/pitch centered on `axis_val + shift`.
+
+    The truncation is what params.SPLIT_JOINT_TIP_RELIEF_MM is for: FDM
+    prints tend to round/bulge at sharp convex corners, and every peak
+    here is exactly that on one piece and the matching concave notch on
+    its neighbor — truncating gives that expected deformation somewhere
+    planned to go instead of an uncontrolled interference at the tip.
+    A partial tooth clipped by `other_hi` is left un-truncated (there may
+    be no room for the flat); same approximation as the untruncated case.
+    """
     center = axis_val + shift
     if not zigzag or feature_size <= 0:
         return [(center, other_lo), (center, other_hi)]
 
-    pts = [(center, other_lo)]
     half_pitch = pitch / 2.0
+    tan_a = math.tan(math.radians(angle_deg)) if angle_deg else 0.0
+    eff_amp = max(feature_size - tip_relief, 0.0)
+    flat_half = 0.0
+    if tip_relief > 0 and tan_a > 0:
+        flat_half = min(tip_relief / tan_a, half_pitch * 0.49)
+
+    pts = [(center, other_lo)]
     o = other_lo
     n = 0
     while o < other_hi - 1e-9:
-        nxt = min(o + half_pitch, other_hi)
+        peak_o = o + half_pitch
         sign = 1.0 if n % 2 == 0 else -1.0
-        pts.append((center + sign * feature_size, nxt))
-        o = nxt
+        amp = center + sign * eff_amp
+        if peak_o >= other_hi - 1e-9:
+            pts.append((amp, other_hi))  # partial tooth at the edge, no flat
+            o = other_hi
+        elif flat_half > 0:
+            pts.append((amp, peak_o - flat_half))
+            pts.append((amp, peak_o + flat_half))
+            o = peak_o
+        else:
+            pts.append((amp, peak_o))
+            o = peak_o
         n += 1
     return pts
 
@@ -115,20 +149,24 @@ def _boundary_points(axis_val: float, shift: float, other_lo: float,
 def _region_solid(axis: str, lo_val: float, hi_val: float, other_lo: float,
                    other_hi: float, lo_is_cut: bool, hi_is_cut: bool,
                    feature_size: float, pitch: float, clearance: float,
+                   angle_deg: float, tip_relief: float,
                    z0: float, zheight: float) -> Part:
     """A prism covering the region between `lo_val` and `hi_val` along
     `axis` ("X" or "Y"), spanning [other_lo, other_hi] on the other axis
     and [z0, z0+zheight] in Z. Boundaries flagged `*_is_cut` get a
     chevron zigzag (shifted inward by half the clearance, so two
     neighboring pieces built from the same nominal boundary leave a gap
-    of `clearance` between them); the rest are flat."""
+    of `clearance` between them, with every tip truncated by
+    `tip_relief`); the rest are flat."""
     lo_shift = clearance / 2.0 if lo_is_cut else 0.0   # shrink inward from below
     hi_shift = -clearance / 2.0 if hi_is_cut else 0.0  # shrink inward from above
 
     lo_pts = _boundary_points(lo_val, lo_shift, other_lo, other_hi,
-                               lo_is_cut, feature_size, pitch)
+                               lo_is_cut, feature_size, pitch, angle_deg,
+                               tip_relief)
     hi_pts = _boundary_points(hi_val, hi_shift, other_lo, other_hi,
-                               hi_is_cut, feature_size, pitch)
+                               hi_is_cut, feature_size, pitch, angle_deg,
+                               tip_relief)
 
     poly_axis_other = lo_pts + list(reversed(hi_pts))
 
@@ -144,6 +182,7 @@ def _region_solid(axis: str, lo_val: float, hi_val: float, other_lo: float,
 
 def _split_along_axis(part: Part, axis: str, cut_positions_abs: list[float],
                        feature_size: float, pitch: float, clearance: float,
+                       angle_deg: float, tip_relief: float,
                        joint: bool) -> list[Part]:
     if not cut_positions_abs:
         return [part]
@@ -175,7 +214,7 @@ def _split_along_axis(part: Part, axis: str, cut_positions_abs: list[float],
         hi_is_cut = joint and i < len(boundaries) - 2
         solid = _region_solid(axis, lo_val, hi_val, other_lo, other_hi,
                                lo_is_cut, hi_is_cut, feature_size, pitch,
-                               clearance, z0, zheight)
+                               clearance, angle_deg, tip_relief, z0, zheight)
         piece = part & solid
         if piece.volume > 1e-9:
             pieces.append(piece)
@@ -186,7 +225,8 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
                   bed_xy_mm: float | None = None, joint: bool = True,
                   feature_size_mm: float | None = None,
                   angle_deg: float | None = None,
-                  clearance_mm: float | None = None) -> list[SplitPiece]:
+                  clearance_mm: float | None = None,
+                  tip_relief_mm: float | None = None) -> list[SplitPiece]:
     """
     Split `part` on lines spaced `grid_pitch_mm` apart (measured from its
     own bounding-box minimum corner) so that every returned piece's X/Y
@@ -201,8 +241,11 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
     docstring for the reasoning — sized from `feature_size_mm`/`angle_deg`
     (defaulting to params.SPLIT_JOINT_FEATURE_SIZE_MM /
     params.SPLIT_JOINT_ANGLE_DEG) with a `clearance_mm` gap (default
-    params.SPLIT_JOINT_CLEARANCE_MM) between mating faces. Pass
-    `joint=False` for a plain flat butt cut instead.
+    params.SPLIT_JOINT_CLEARANCE_MM) between mating faces, and every
+    peak/trough truncated by `tip_relief_mm` (default
+    params.SPLIT_JOINT_TIP_RELIEF_MM) to leave room for the corner
+    rounding/bulging FDM prints tend to show at sharp convex points.
+    Pass `joint=False` for a plain flat butt cut instead.
 
     Only X and Y are split — Z is left alone, same as the envelope check
     in src/envelope.py (the brief gives no Z/gantry limit to split against).
@@ -221,11 +264,13 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
     angle_deg = P.SPLIT_JOINT_ANGLE_DEG if angle_deg is None else angle_deg
     clearance_mm = (P.SPLIT_JOINT_CLEARANCE_MM if clearance_mm is None
                      else clearance_mm)
+    tip_relief_mm = (P.SPLIT_JOINT_TIP_RELIEF_MM if tip_relief_mm is None
+                      else tip_relief_mm)
 
     if joint:
         pitch_mm = P.chevron_pitch_mm(float(feature_size_mm), float(angle_deg))
     else:
-        pitch_mm, feature_size_mm, clearance_mm = 0.0, 0.0, 0.0
+        pitch_mm, feature_size_mm, clearance_mm, tip_relief_mm = 0.0, 0.0, 0.0, 0.0
 
     bb = part.bounding_box()
     size_x, size_y = bb.size.X, bb.size.Y
@@ -236,12 +281,14 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
     cuts_y_abs = [bb.min.Y + c for c in cuts_y_local]
 
     x_pieces = _split_along_axis(part, "X", cuts_x_abs, feature_size_mm,
-                                  pitch_mm, clearance_mm, joint)
+                                  pitch_mm, clearance_mm, angle_deg,
+                                  tip_relief_mm, joint)
 
     raw_pieces: list[Part] = []
     for xp in x_pieces:
         raw_pieces.extend(_split_along_axis(xp, "Y", cuts_y_abs, feature_size_mm,
-                                             pitch_mm, clearance_mm, joint))
+                                             pitch_mm, clearance_mm, angle_deg,
+                                             tip_relief_mm, joint))
 
     pieces: list[SplitPiece] = []
     for raw in raw_pieces:

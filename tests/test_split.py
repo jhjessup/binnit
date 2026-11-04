@@ -138,8 +138,10 @@ def test_chevron_joint_uses_params_dimensions_by_default():
     default_overshoot = default_pieces[0].part.bounding_box().size.X - 164.0
     bigger_overshoot = bigger_tooth_pieces[0].part.bounding_box().size.X - 164.0
     assert bigger_overshoot > default_overshoot
-    assert default_overshoot == pytest.approx(P.SPLIT_JOINT_FEATURE_SIZE_MM,
-                                                abs=0.1)
+    # overshoot = (feature_size - tip_relief) - half the clearance shift
+    expected = (P.SPLIT_JOINT_FEATURE_SIZE_MM - P.SPLIT_JOINT_TIP_RELIEF_MM
+                - P.SPLIT_JOINT_CLEARANCE_MM / 2.0)
+    assert default_overshoot == pytest.approx(expected, abs=0.01)
 
 
 def test_chevron_cut_removes_only_the_clearance_gap_volume():
@@ -173,3 +175,46 @@ def test_chevron_params_are_internally_consistent():
     # it was derived from, with room to spare on both sides.
     assert P.SPLIT_JOINT_FEATURE_SIZE_MM < P.DRAWER_BOX_FLOOR_THICKNESS_MM
     assert P.SPLIT_JOINT_FEATURE_SIZE_MM < P.CASE_TOP_BOTTOM_SKIN_MM
+
+
+# --- tip relief: truncate peaks/troughs to absorb corner deformation ------
+
+def test_tip_relief_reuses_the_clearance_value_not_a_new_guess():
+    assert P.SPLIT_JOINT_TIP_RELIEF_MM == P.SPLIT_JOINT_CLEARANCE_MM
+
+
+def test_no_tip_relief_produces_a_sharper_peak_than_default():
+    # With tip_relief_mm=0, peaks come to a (near-)full point; with the
+    # default relief, every peak is truncated, so the piece's bounding
+    # box should overshoot the nominal cut line less.
+    part = _box(400, 90)
+    sharp_pieces = split_to_fit(part, grid_pitch_mm=164.0, bed_xy_mm=250.0,
+                                 tip_relief_mm=0.0)
+    relieved_pieces = split_to_fit(part, grid_pitch_mm=164.0, bed_xy_mm=250.0)
+
+    sharp_overshoot = sharp_pieces[0].part.bounding_box().size.X - 164.0
+    relieved_overshoot = relieved_pieces[0].part.bounding_box().size.X - 164.0
+    assert relieved_overshoot < sharp_overshoot
+
+
+def test_tip_relief_keeps_pieces_fitting_the_bed():
+    part = _box(400, 300)
+    pieces = split_to_fit(part, grid_pitch_mm=164.0, bed_xy_mm=250.0)
+    assert len(pieces) == 4
+    for piece in pieces:
+        bb = piece.part.bounding_box()
+        assert bb.size.X <= 250.0 + 1e-6
+        assert bb.size.Y <= 250.0 + 1e-6
+
+
+def test_large_tip_relief_is_capped_so_the_tooth_never_inverts():
+    # An absurdly large tip_relief_mm (bigger than feature_size itself)
+    # must not produce a negative/invalid tooth height or a crossed
+    # polygon — the split should still succeed and still fit the bed.
+    part = _box(400, 90)
+    pieces = split_to_fit(part, grid_pitch_mm=164.0, bed_xy_mm=250.0,
+                           feature_size_mm=1.5, tip_relief_mm=10.0)
+    assert len(pieces) == 2
+    for piece in pieces:
+        bb = piece.part.bounding_box()
+        assert bb.size.X <= 250.0 + 1e-6

@@ -208,6 +208,15 @@ Dimensions, all in `params.py`:
   untested, half of `INTERLOCK_SLIDING_CLEARANCE_MM` since this joint is
   hand-registered and glued rather than slid together; needs tuning by
   printing it, same as that other clearance).
+- `SPLIT_JOINT_TIP_RELIEF_MM` = **0.15 mm** (`= SPLIT_JOINT_CLEARANCE_MM`
+  — reused rather than a second independent guess). Every peak/trough is
+  truncated into a small flat by this amount on both mating pieces,
+  rather than modeled as a perfect sharp point: FDM prints tend to
+  round/bulge slightly at sharp convex corners (the nozzle can't reverse
+  direction instantly), and every chevron peak is exactly that convex
+  tip on one piece nesting into the matching concave notch on its
+  neighbor. Truncating gives that expected deformation somewhere planned
+  to go instead of an uncontrolled interference right at the tip.
 
 `joint=True` is `split_to_fit()`'s default; `joint=False` reverts to a
 plain flat butt cut (used for the pure splitting-mechanism tests).
