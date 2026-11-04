@@ -65,6 +65,10 @@ own, independently-written geometry — they are not copied Vault geometry.
   flags this one explicitly as a guess, not a measurement)
 - Insert side channels (INFERRED, not measured): S none, M ~19 mm,
   L ~17 mm, XL ~15 mm (`INSERT_SIDE_CHANNEL_MM`)
+- Drawer box floor thickness: **3 mm** (`DRAWER_BOX_FLOOR_THICKNESS_MM`,
+  STATED as a scaffold decision — not in the original brief, which only
+  gave side/back/front wall thickness; decided explicitly when building
+  the first generator rather than assumed)
 
 Formulas:
 - Drawer box outside width = case outside width − 30 mm

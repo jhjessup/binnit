@@ -140,6 +140,11 @@ DRAWER_BOX_BACK_WALL_MM = 3.0      # MEASURED (reference)
 DRAWER_BOX_FRONT_WALL_MM = 7.0     # MEASURED (reference) — brief says "about
                                    # 7 mm"; treat as provisional pending a
                                    # direct check against real stock.
+DRAWER_BOX_FLOOR_THICKNESS_MM = 3.0  # STATED (scaffold decision) — not in
+                                      # the original brief (which only gave
+                                      # side/back/front wall thickness);
+                                      # decided when building the step-4
+                                      # generator rather than guessed.
 
 CASE_WALL_MM = 3.0                 # MEASURED (reference)
 CASE_SIDE_TOTAL_MM = 15.0          # MEASURED (reference) — per side, includes
