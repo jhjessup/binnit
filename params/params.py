@@ -317,21 +317,13 @@ PRINT_PROFILE_NOTE = (
 
 # --- Splitting oversized parts (brief: "split on grid lines") ------------
 #
-# The brief says an oversized part is split on grid lines, but doesn't say
-# which grid. Binnit has two candidate pitches: the 42 mm internal
-# Gridfinity-compatible grid, and the 164 mm bay pitch (where interlock
-# connectors already sit — see interlock_connector_line_count()). Asked
-# directly, the answer was "don't know" — so this is OPEN, not defaulted,
-# and src/split.py requires a caller to pass a real value rather than
-# silently assuming one of the two.
-SPLIT_GRID_PITCH_MM = OpenParameter(
-    "SPLIT_GRID_PITCH_MM",
-    "Which grid a split must land on — the 42 mm internal pitch "
-    "(GRID_PITCH_MM) or the 164 mm bay pitch (BAY_PITCH_MM) — is not "
-    "decided. src/split.split_to_fit() takes grid_pitch_mm as a required "
-    "argument so callers must supply a real value explicitly; this name "
-    "exists so a future decision has a single place to land.",
-)
+# DECIDED: splits land on the 42 mm internal grid (GRID_PITCH_MM), not the
+# 164 mm bay pitch. Reasoning (given directly, not inferred): a small bed
+# like a Voron Zero's 120x120 mm can't even fit one whole bay pitch
+# (164 mm) in a single piece, so bay-pitch splitting would be useless on
+# it — the internal grid is the only one fine enough to be useful across
+# the range of beds this project targets.
+SPLIT_GRID_PITCH_MM = GRID_PITCH_MM
 
 # What (if anything) holds two split halves together after printing is
 # also undecided — no joint is implemented yet (current split geometry is

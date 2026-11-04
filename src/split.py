@@ -2,13 +2,13 @@
 Splitting oversized parts to fit the print bed.
 
 The design brief says a part larger than the print envelope is "split on
-grid lines" but doesn't say which grid — the 42 mm internal pitch
-(params.GRID_PITCH_MM) or the 164 mm bay pitch (params.BAY_PITCH_MM),
-where the interlock connectors already sit. That's recorded as OPEN
-(params.SPLIT_GRID_PITCH_MM) rather than guessed, so split_to_fit() below
-takes grid_pitch_mm as a *required* argument: pass params.SPLIT_GRID_PITCH_MM
-as a default and it will raise OpenParameterError the moment it's used,
-the same way every other OPEN value in this repo does.
+grid lines" but doesn't say which grid. DECIDED: the 42 mm internal grid
+(params.GRID_PITCH_MM, aliased as params.SPLIT_GRID_PITCH_MM), not the
+164 mm bay pitch — a small bed (e.g. a Voron Zero's 120x120 mm) can't fit
+even one whole bay pitch in a single piece, so only the finer internal
+grid is useful across the range of beds this project targets.
+split_to_fit() defaults grid_pitch_mm to params.SPLIT_GRID_PITCH_MM but
+still accepts an override, for experimenting with a different pitch.
 
 What (if anything) joins two split halves back together after printing is
 also undecided (params.SPLIT_JOINT_TYPE / SPLIT_JOINT_FEATURE_SIZE_MM).
@@ -73,12 +73,16 @@ def _choose_cut_positions(size_mm: float, pitch_mm: float, bed_mm: float,
     return cuts
 
 
-def split_to_fit(part: Part, grid_pitch_mm: float,
+def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
                   bed_xy_mm: float | None = None) -> list[SplitPiece]:
     """
     Split `part` on lines spaced `grid_pitch_mm` apart (measured from its
     own bounding-box minimum corner) so that every returned piece's X/Y
     footprint fits within `bed_xy_mm` (default: params.PRINT_BED_USABLE_XY_MM).
+
+    `grid_pitch_mm` defaults to params.SPLIT_GRID_PITCH_MM (the 42 mm
+    internal grid — see module docstring for why that one, not the bay
+    pitch). Pass a different value to try another pitch.
 
     Only X and Y are split — Z is left alone, same as the envelope check
     in src/envelope.py (the brief gives no Z/gantry limit to split against).
@@ -88,18 +92,13 @@ def split_to_fit(part: Part, grid_pitch_mm: float,
 
     Raises SplitError if `grid_pitch_mm` doesn't divide the oversize
     cleanly enough to produce bed-sized pieces (e.g. the grid is too
-    coarse). Raises OpenParameterError (not SplitError) if grid_pitch_mm
-    itself is params.SPLIT_GRID_PITCH_MM, i.e. the caller didn't supply a
-    real decision.
+    coarse for the bed).
     """
+    grid_pitch_mm = P.SPLIT_GRID_PITCH_MM if grid_pitch_mm is None else grid_pitch_mm
     bed_xy_mm = P.PRINT_BED_USABLE_XY_MM if bed_xy_mm is None else bed_xy_mm
 
     bb = part.bounding_box()
     size_x, size_y = bb.size.X, bb.size.Y
-
-    # Force any OpenParameter to raise now, with its real message, rather
-    # than deep inside arithmetic below.
-    float(grid_pitch_mm)
 
     cuts_x = _choose_cut_positions(size_x, grid_pitch_mm, bed_xy_mm, "X")
     cuts_y = _choose_cut_positions(size_y, grid_pitch_mm, bed_xy_mm, "Y")

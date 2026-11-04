@@ -165,28 +165,29 @@ Binnit's own design — not Vault-compatible.
 
 ### Splitting oversized parts
 
-`src/split.py`'s `split_to_fit(part, grid_pitch_mm, bed_xy_mm=None)` is
-the interface for this: it cuts a part on lines spaced `grid_pitch_mm`
+`src/split.py`'s `split_to_fit(part, grid_pitch_mm=None, bed_xy_mm=None)`
+is the interface for this: it cuts a part on lines spaced `grid_pitch_mm`
 apart (X and Y only, same as the envelope check — no stated Z/gantry
 limit to split against) into the minimal number of pieces that each fit
 `bed_xy_mm` (default `PRINT_BED_USABLE_XY_MM`), returning a `SplitPiece`
 per piece with its grid cell index and its offset back into the original
 part's coordinate frame.
 
-Two things about it are deliberately unresolved, both OPEN in
-`params.py` (see [Open items](#open-items)):
+**Which grid — DECIDED.** Splits land on the **42 mm internal grid**
+(`GRID_PITCH_MM`, aliased as `SPLIT_GRID_PITCH_MM` and the default for
+`grid_pitch_mm`), not the 164 mm bay pitch. Reasoning: a small bed — a
+Voron Zero's 120x120 mm was the deciding example — can't fit even one
+whole bay pitch (164 mm) in a single piece, so bay-pitch splitting would
+be useless on it; the finer internal grid works across the range of beds
+this project targets. `tests/test_split.py` proves this out directly: a
+164 mm-wide (one bay) part correctly splits to fit a 120 mm bed on the
+internal grid, while attempting the same split on the bay pitch raises
+`SplitError` (the first grid line already exceeds the bed).
 
-- **Which grid.** The brief says "grid lines" but not which grid —
-  `GRID_PITCH_MM` (42 mm internal) or `BAY_PITCH_MM` (164 mm, where
-  interlock connectors already sit). `split_to_fit()` takes
-  `grid_pitch_mm` as a *required* argument rather than defaulting to
-  either, so nothing silently picks one. Passing
-  `params.SPLIT_GRID_PITCH_MM` (the undecided value) raises
-  `OpenParameterError`, same as any other OPEN value in this repo.
-- **What joins the pieces back together.** Current output is a flat
-  butt cut — no dowel, tab, or other joint feature. `SPLIT_JOINT_TYPE`
-  and `SPLIT_JOINT_FEATURE_SIZE_MM` are reserved placeholders for that
-  decision, not yet used by any geometry.
+**What joins the pieces back together — still OPEN.** Current output is
+a flat butt cut — no dowel, tab, or other joint feature. `SPLIT_JOINT_TYPE`
+and `SPLIT_JOINT_FEATURE_SIZE_MM` (`params.py`, see [Open items](#open-items))
+are reserved placeholders for that decision, not yet used by any geometry.
 
 No generator produces an oversized part yet (the only generator so far,
 the S drawer box, fits the bed). The interface is validated against a
@@ -227,7 +228,6 @@ list in the same change.
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
 | `INTERLOCK_DOVETAIL_WIDTH_MM` | Dovetail width — tight because a 5 mm tall, 45° dovetail spreads ~10 mm wider across its height, against only a 15 mm side zone (`INTERLOCK_SIDE_ZONE_MM`) |
 | `INTERLOCK_END_OF_TRAVEL_DETENT` | Mechanism and dimensions for the end-of-travel detent |
-| `SPLIT_GRID_PITCH_MM` | Which grid an oversized-part split lands on — 42 mm internal (`GRID_PITCH_MM`) or 164 mm bay (`BAY_PITCH_MM`) pitch |
 | `SPLIT_JOINT_TYPE` | Mechanism (if any) for rejoining a split part — butt+glue, dowel, tab-and-slot, screw bosses, etc. |
 | `SPLIT_JOINT_FEATURE_SIZE_MM` | Characteristic size of whichever joint `SPLIT_JOINT_TYPE` ends up being |
 
