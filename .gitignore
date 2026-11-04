@@ -1,0 +1,22 @@
+# Generated geometry artifacts — never commit these
+*.stl
+*.step
+*.stp
+*.glb
+*.3mf
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
