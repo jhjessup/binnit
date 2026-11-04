@@ -10,15 +10,30 @@ grid is useful across the range of beds this project targets.
 split_to_fit() defaults grid_pitch_mm to params.SPLIT_GRID_PITCH_MM but
 still accepts an override, for experimenting with a different pitch.
 
-What (if anything) joins two split halves back together after printing is
-also undecided (params.SPLIT_JOINT_TYPE / SPLIT_JOINT_FEATURE_SIZE_MM).
-The geometry produced here is a flat butt cut with no joint feature; this
-module does not add one.
+What joins two split halves back together after printing is also
+DECIDED: a repeating chevron ("zigzag finger joint") cut into the split
+plane itself, rather than a flat butt cut — see params.SPLIT_JOINT_TYPE
+and friends for the dimensions and reasoning. It self-aligns the two
+halves on straight-on contact (no sliding together, unlike the stacking
+interlock's dovetail — appropriate since this joint is meant to be
+glued) and multiplies the bonded surface area versus a flat cut. Pass
+`joint=False` to split_to_fit() for the old flat-cut behavior instead.
+
+Scope note: chevron teeth are applied independently per axis, in two
+sequential passes (split X, then split Y on each resulting column). A
+part that needs splitting on both axes gets chevron teeth on every cut,
+but the four-piece corner where an X cut crosses a Y cut is not
+specially mitered — each piece simply carries whichever boundary each
+pass gave it. That's a known cosmetic/structural approximation, not a
+correctness bug: every cut is still a true boolean split of the real
+part, pieces still partition it exactly (minus the deliberate clearance
+gap), and every piece still fits the bed.
 """
 
+import math
 from dataclasses import dataclass
 
-from build123d import Align, Box, Part
+from build123d import Part, Polyline, extrude, make_face
 
 from params import params as P
 
@@ -73,8 +88,105 @@ def _choose_cut_positions(size_mm: float, pitch_mm: float, bed_mm: float,
     return cuts
 
 
+def _boundary_points(axis_val: float, shift: float, other_lo: float,
+                      other_hi: float, zigzag: bool, feature_size: float,
+                      pitch: float) -> list[tuple[float, float]]:
+    """Points tracing a boundary line (axis_coord, other_coord) from
+    other_lo to other_hi. Flat at `axis_val + shift` if not zigzag;
+    otherwise a triangle wave of the given amplitude/pitch centered on
+    `axis_val + shift`."""
+    center = axis_val + shift
+    if not zigzag or feature_size <= 0:
+        return [(center, other_lo), (center, other_hi)]
+
+    pts = [(center, other_lo)]
+    half_pitch = pitch / 2.0
+    o = other_lo
+    n = 0
+    while o < other_hi - 1e-9:
+        nxt = min(o + half_pitch, other_hi)
+        sign = 1.0 if n % 2 == 0 else -1.0
+        pts.append((center + sign * feature_size, nxt))
+        o = nxt
+        n += 1
+    return pts
+
+
+def _region_solid(axis: str, lo_val: float, hi_val: float, other_lo: float,
+                   other_hi: float, lo_is_cut: bool, hi_is_cut: bool,
+                   feature_size: float, pitch: float, clearance: float,
+                   z0: float, zheight: float) -> Part:
+    """A prism covering the region between `lo_val` and `hi_val` along
+    `axis` ("X" or "Y"), spanning [other_lo, other_hi] on the other axis
+    and [z0, z0+zheight] in Z. Boundaries flagged `*_is_cut` get a
+    chevron zigzag (shifted inward by half the clearance, so two
+    neighboring pieces built from the same nominal boundary leave a gap
+    of `clearance` between them); the rest are flat."""
+    lo_shift = clearance / 2.0 if lo_is_cut else 0.0   # shrink inward from below
+    hi_shift = -clearance / 2.0 if hi_is_cut else 0.0  # shrink inward from above
+
+    lo_pts = _boundary_points(lo_val, lo_shift, other_lo, other_hi,
+                               lo_is_cut, feature_size, pitch)
+    hi_pts = _boundary_points(hi_val, hi_shift, other_lo, other_hi,
+                               hi_is_cut, feature_size, pitch)
+
+    poly_axis_other = lo_pts + list(reversed(hi_pts))
+
+    if axis == "X":
+        poly_xy = [(a, o) for (a, o) in poly_axis_other]
+    else:  # axis == "Y": a is the Y coordinate, o is the X coordinate
+        poly_xy = [(o, a) for (a, o) in poly_axis_other]
+
+    face = make_face(Polyline(*poly_xy, close=True))
+    solid = extrude(face, amount=zheight)
+    return solid.translate((0, 0, z0))
+
+
+def _split_along_axis(part: Part, axis: str, cut_positions_abs: list[float],
+                       feature_size: float, pitch: float, clearance: float,
+                       joint: bool) -> list[Part]:
+    if not cut_positions_abs:
+        return [part]
+
+    bb = part.bounding_box()
+    if axis == "X":
+        lo_overall, hi_overall = bb.min.X, bb.max.X
+        other_lo, other_hi = bb.min.Y, bb.max.Y
+    else:
+        lo_overall, hi_overall = bb.min.Y, bb.max.Y
+        other_lo, other_hi = bb.min.X, bb.max.X
+
+    other_margin = 5.0
+    other_lo -= other_margin
+    other_hi += other_margin
+
+    outer_margin = (hi_overall - lo_overall) + 1000.0
+    boundaries = [lo_overall - outer_margin] + list(cut_positions_abs) + \
+        [hi_overall + outer_margin]
+
+    z_margin = 1.0
+    z0 = bb.min.Z - z_margin
+    zheight = bb.size.Z + 2 * z_margin
+
+    pieces = []
+    for i in range(len(boundaries) - 1):
+        lo_val, hi_val = boundaries[i], boundaries[i + 1]
+        lo_is_cut = joint and i > 0
+        hi_is_cut = joint and i < len(boundaries) - 2
+        solid = _region_solid(axis, lo_val, hi_val, other_lo, other_hi,
+                               lo_is_cut, hi_is_cut, feature_size, pitch,
+                               clearance, z0, zheight)
+        piece = part & solid
+        if piece.volume > 1e-9:
+            pieces.append(piece)
+    return pieces
+
+
 def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
-                  bed_xy_mm: float | None = None) -> list[SplitPiece]:
+                  bed_xy_mm: float | None = None, joint: bool = True,
+                  feature_size_mm: float | None = None,
+                  angle_deg: float | None = None,
+                  clearance_mm: float | None = None) -> list[SplitPiece]:
     """
     Split `part` on lines spaced `grid_pitch_mm` apart (measured from its
     own bounding-box minimum corner) so that every returned piece's X/Y
@@ -82,7 +194,15 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
 
     `grid_pitch_mm` defaults to params.SPLIT_GRID_PITCH_MM (the 42 mm
     internal grid — see module docstring for why that one, not the bay
-    pitch). Pass a different value to try another pitch.
+    pitch).
+
+    By default (`joint=True`) each internal cut is a repeating chevron
+    joint — see params.SPLIT_JOINT_* for the dimensions and the module
+    docstring for the reasoning — sized from `feature_size_mm`/`angle_deg`
+    (defaulting to params.SPLIT_JOINT_FEATURE_SIZE_MM /
+    params.SPLIT_JOINT_ANGLE_DEG) with a `clearance_mm` gap (default
+    params.SPLIT_JOINT_CLEARANCE_MM) between mating faces. Pass
+    `joint=False` for a plain flat butt cut instead.
 
     Only X and Y are split — Z is left alone, same as the envelope check
     in src/envelope.py (the brief gives no Z/gantry limit to split against).
@@ -92,52 +212,58 @@ def split_to_fit(part: Part, grid_pitch_mm: float | None = None,
 
     Raises SplitError if `grid_pitch_mm` doesn't divide the oversize
     cleanly enough to produce bed-sized pieces (e.g. the grid is too
-    coarse for the bed).
+    coarse for the bed), or if a resulting piece still doesn't fit.
     """
     grid_pitch_mm = P.SPLIT_GRID_PITCH_MM if grid_pitch_mm is None else grid_pitch_mm
     bed_xy_mm = P.PRINT_BED_USABLE_XY_MM if bed_xy_mm is None else bed_xy_mm
+    feature_size_mm = (P.SPLIT_JOINT_FEATURE_SIZE_MM if feature_size_mm is None
+                        else feature_size_mm)
+    angle_deg = P.SPLIT_JOINT_ANGLE_DEG if angle_deg is None else angle_deg
+    clearance_mm = (P.SPLIT_JOINT_CLEARANCE_MM if clearance_mm is None
+                     else clearance_mm)
+
+    if joint:
+        pitch_mm = P.chevron_pitch_mm(float(feature_size_mm), float(angle_deg))
+    else:
+        pitch_mm, feature_size_mm, clearance_mm = 0.0, 0.0, 0.0
 
     bb = part.bounding_box()
     size_x, size_y = bb.size.X, bb.size.Y
 
-    cuts_x = _choose_cut_positions(size_x, grid_pitch_mm, bed_xy_mm, "X")
-    cuts_y = _choose_cut_positions(size_y, grid_pitch_mm, bed_xy_mm, "Y")
+    cuts_x_local = _choose_cut_positions(size_x, grid_pitch_mm, bed_xy_mm, "X")
+    cuts_y_local = _choose_cut_positions(size_y, grid_pitch_mm, bed_xy_mm, "Y")
+    cuts_x_abs = [bb.min.X + c for c in cuts_x_local]
+    cuts_y_abs = [bb.min.Y + c for c in cuts_y_local]
 
-    bounds_x = [0.0] + cuts_x + [size_x]
-    bounds_y = [0.0] + cuts_y + [size_y]
+    x_pieces = _split_along_axis(part, "X", cuts_x_abs, feature_size_mm,
+                                  pitch_mm, clearance_mm, joint)
 
-    z_margin = 1.0
-    full_z = bb.size.Z + 2 * z_margin
-    z_start = bb.min.Z - z_margin
+    raw_pieces: list[Part] = []
+    for xp in x_pieces:
+        raw_pieces.extend(_split_along_axis(xp, "Y", cuts_y_abs, feature_size_mm,
+                                             pitch_mm, clearance_mm, joint))
 
     pieces: list[SplitPiece] = []
-    for iy in range(len(bounds_y) - 1):
-        y0, y1 = bounds_y[iy], bounds_y[iy + 1]
-        for ix in range(len(bounds_x) - 1):
-            x0, x1 = bounds_x[ix], bounds_x[ix + 1]
+    for raw in raw_pieces:
+        raw_bb = raw.bounding_box()
+        cx = (raw_bb.min.X + raw_bb.max.X) / 2.0
+        cy = (raw_bb.min.Y + raw_bb.max.Y) / 2.0
+        ix = sum(1 for c in cuts_x_abs if c <= cx)
+        iy = sum(1 for c in cuts_y_abs if c <= cy)
 
-            window = Box(x1 - x0, y1 - y0, full_z,
-                         align=(Align.MIN, Align.MIN, Align.MIN))
-            window = window.translate((bb.min.X + x0, bb.min.Y + y0, z_start))
+        offset = (raw_bb.min.X, raw_bb.min.Y, raw_bb.min.Z)
+        located = raw.translate((-raw_bb.min.X, -raw_bb.min.Y, 0))
+        located_bb = located.bounding_box()
 
-            piece = part & window
-            if piece.volume <= 1e-9:
-                continue  # this cell is entirely outside the part's material
+        if (located_bb.size.X > bed_xy_mm + 1e-3 or
+                located_bb.size.Y > bed_xy_mm + 1e-3):
+            raise SplitError(
+                f"Internal error: piece ({ix},{iy}) footprint "
+                f"{located_bb.size.X:.1f} x {located_bb.size.Y:.1f} mm still "
+                f"exceeds the {bed_xy_mm:.1f} mm bed after splitting."
+            )
 
-            piece_bb = piece.bounding_box()
-            piece = piece.translate((-piece_bb.min.X, -piece_bb.min.Y, 0))
-
-            if piece_bb.size.X > bed_xy_mm + 1e-6 or piece_bb.size.Y > bed_xy_mm + 1e-6:
-                raise SplitError(
-                    f"Internal error: piece ({ix},{iy}) footprint "
-                    f"{piece_bb.size.X:.1f} x {piece_bb.size.Y:.1f} mm still "
-                    f"exceeds the {bed_xy_mm:.1f} mm bed after splitting."
-                )
-
-            pieces.append(SplitPiece(
-                part=piece,
-                grid_index=(ix, iy),
-                original_offset=(piece_bb.min.X, piece_bb.min.Y, piece_bb.min.Z),
-            ))
+        pieces.append(SplitPiece(part=located, grid_index=(ix, iy),
+                                  original_offset=offset))
 
     return pieces

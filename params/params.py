@@ -30,6 +30,7 @@ See docs/DESIGN.md "Open items" for the narrative list of every OPEN name
 below, with context on why it's unresolved and what resolving it needs.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Union
 
@@ -325,20 +326,58 @@ PRINT_PROFILE_NOTE = (
 # the range of beds this project targets.
 SPLIT_GRID_PITCH_MM = GRID_PITCH_MM
 
-# What (if anything) holds two split halves together after printing is
-# also undecided — no joint is implemented yet (current split geometry is
-# a flat butt cut). These are reserved placeholders for that decision.
-SPLIT_JOINT_TYPE = OpenParameter(
-    "SPLIT_JOINT_TYPE",
-    "Mechanism (if any) for rejoining a split part: flat butt + glue, "
-    "dowel pins, tab-and-slot, screw bosses, etc. Not decided.",
-)
-SPLIT_JOINT_FEATURE_SIZE_MM = OpenParameter(
-    "SPLIT_JOINT_FEATURE_SIZE_MM",
-    "Characteristic size (e.g. dowel diameter, tab width) of whichever "
-    "joint SPLIT_JOINT_TYPE ends up being. Not decided; has no meaning "
-    "until a joint type is chosen.",
-)
+# What holds two split halves together after printing — DECIDED: a
+# repeating chevron ("zigzag finger joint") cut into the split plane
+# itself, self-aligning on straight-on contact (unlike the stacking
+# interlock's dovetail, this doesn't slide together — good, since it's
+# meant to be glued, and sliding glue-covered faces together is a mess).
+# Glue carries the actual bonding strength; the zigzag's job is to
+# register the two halves exactly and multiply the bonded surface area
+# versus a flat butt cut.
+SPLIT_JOINT_TYPE = "chevron"          # STATED decision
+
+SPLIT_JOINT_ANGLE_DEG = 45.0          # STATED decision — matches
+                                      # INTERLOCK_DOVETAIL_ANGLE_DEG, for
+                                      # visual/structural consistency
+                                      # across the whole design
+
+# Tooth amplitude: sized to fit inside the thinnest walls a split is
+# likely to cross without a tooth poking through the far face or leaving
+# an unsupported sliver. Derived from the two 3mm skins named directly as
+# the limiting case (not a bare literal): the drawer box floor and the
+# case top/bottom skins.
+SPLIT_JOINT_FEATURE_SIZE_MM = min(               # FORMULA — see note above
+    DRAWER_BOX_FLOOR_THICKNESS_MM, CASE_TOP_BOTTOM_SKIN_MM
+) / 2.0
+# Note: this does NOT account for CASE_BACK_WALL_MM (2mm, itself only an
+# ASSUMPTION) or any other wall thinner than 3mm. A split crossing
+# thinner material should pass a smaller feature_size_mm explicitly to
+# src/split.py rather than rely on this default.
+
+
+def chevron_pitch_mm(feature_size_mm: float, angle_deg: float) -> float:
+    """FORMULA: tooth pitch for a triangular zigzag of the given leg
+    angle and amplitude. A triangle wave with `angle_deg`-from-vertical
+    legs and amplitude `feature_size_mm` has half-pitch =
+    feature_size_mm / tan(angle_deg); this is the full pitch. Not an
+    independent guess — it falls out of the angle and amplitude once
+    both of those are chosen."""
+    return 2.0 * feature_size_mm / math.tan(math.radians(angle_deg))
+
+
+SPLIT_JOINT_PITCH_MM = chevron_pitch_mm(       # FORMULA — see function above
+    SPLIT_JOINT_FEATURE_SIZE_MM, SPLIT_JOINT_ANGLE_DEG
+)  # = 3.0 mm at the defaults above
+
+SPLIT_JOINT_CLEARANCE_MM = 0.15       # STARTING — untested starting value,
+                                      # half of INTERLOCK_SLIDING_CLEARANCE_MM.
+                                      # This joint is hand-registered and
+                                      # glued, not slid together, so a
+                                      # tighter gap is reasonable to try
+                                      # first — but like that other
+                                      # clearance, this needs tuning by
+                                      # actually printing it, not trusted
+                                      # as final.
 
 
 # ---------------------------------------------------------------------------

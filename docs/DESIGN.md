@@ -165,13 +165,13 @@ Binnit's own design — not Vault-compatible.
 
 ### Splitting oversized parts
 
-`src/split.py`'s `split_to_fit(part, grid_pitch_mm=None, bed_xy_mm=None)`
-is the interface for this: it cuts a part on lines spaced `grid_pitch_mm`
-apart (X and Y only, same as the envelope check — no stated Z/gantry
-limit to split against) into the minimal number of pieces that each fit
-`bed_xy_mm` (default `PRINT_BED_USABLE_XY_MM`), returning a `SplitPiece`
-per piece with its grid cell index and its offset back into the original
-part's coordinate frame.
+`src/split.py`'s `split_to_fit(part, grid_pitch_mm=None, bed_xy_mm=None,
+joint=True, ...)` is the interface for this: it cuts a part on lines
+spaced `grid_pitch_mm` apart (X and Y only, same as the envelope check —
+no stated Z/gantry limit to split against) into the minimal number of
+pieces that each fit `bed_xy_mm` (default `PRINT_BED_USABLE_XY_MM`),
+returning a `SplitPiece` per piece with its grid cell index and its
+offset back into the original part's coordinate frame.
 
 **Which grid — DECIDED.** Splits land on the **42 mm internal grid**
 (`GRID_PITCH_MM`, aliased as `SPLIT_GRID_PITCH_MM` and the default for
@@ -184,16 +184,45 @@ this project targets. `tests/test_split.py` proves this out directly: a
 internal grid, while attempting the same split on the bay pitch raises
 `SplitError` (the first grid line already exceeds the bed).
 
-**What joins the pieces back together — still OPEN.** Current output is
-a flat butt cut — no dowel, tab, or other joint feature. `SPLIT_JOINT_TYPE`
-and `SPLIT_JOINT_FEATURE_SIZE_MM` (`params.py`, see [Open items](#open-items))
-are reserved placeholders for that decision, not yet used by any geometry.
+**What joins the pieces back together — DECIDED.** A repeating chevron
+("zigzag finger joint") cut into the split plane itself
+(`SPLIT_JOINT_TYPE = "chevron"`), self-aligning on straight-on contact —
+unlike the stacking interlock's dovetail, it does not slide together,
+which matters here because this joint is meant to be glued and sliding
+glue-covered faces together is a mess. Glue carries the bonding
+strength; the zigzag registers the two halves exactly and multiplies the
+bonded surface area versus a flat cut.
+
+Dimensions, all in `params.py`:
+- `SPLIT_JOINT_ANGLE_DEG` = **45°** — matches `INTERLOCK_DOVETAIL_ANGLE_DEG`.
+- `SPLIT_JOINT_FEATURE_SIZE_MM` = **1.5 mm** (FORMULA: half of the
+  thinner of `DRAWER_BOX_FLOOR_THICKNESS_MM` / `CASE_TOP_BOTTOM_SKIN_MM`,
+  both 3 mm) — sized to fit inside the thinnest walls a split is likely
+  to cross without a tooth poking through the far face. Doesn't account
+  for `CASE_BACK_WALL_MM` (2 mm, itself only an ASSUMPTION) or any wall
+  thinner than 3 mm; a split through thinner material should pass a
+  smaller `feature_size_mm` explicitly.
+- `SPLIT_JOINT_PITCH_MM` = **3.0 mm** (FORMULA via `chevron_pitch_mm()`:
+  pitch follows from angle + amplitude, not a separate guess).
+- `SPLIT_JOINT_CLEARANCE_MM` = **0.15 mm** per mating face (STARTING —
+  untested, half of `INTERLOCK_SLIDING_CLEARANCE_MM` since this joint is
+  hand-registered and glued rather than slid together; needs tuning by
+  printing it, same as that other clearance).
+
+`joint=True` is `split_to_fit()`'s default; `joint=False` reverts to a
+plain flat butt cut (used for the pure splitting-mechanism tests).
+Scope note: chevron teeth are applied per axis in two sequential passes
+(split X, then split Y per column) — every cut gets its teeth, but the
+corner where an X cut crosses a Y cut isn't specially mitered. Still a
+true boolean partition of the real part either way, just a cosmetic/
+structural approximation at that corner.
 
 No generator produces an oversized part yet (the only generator so far,
-the S drawer box, fits the bed). The interface is validated against a
-synthetic oversized test box in `tests/test_split.py`, and is meant to be
-wired into the case generator once that exists — likely needed for L
-(492 mm) and XL (656 mm), both over the 250 mm usable bed in width alone.
+the S drawer box, fits the bed). The interface — both the grid choice
+and the chevron joint — is validated against synthetic oversized test
+boxes in `tests/test_split.py`, and is meant to be wired into the case
+generator once that exists — likely needed for L (492 mm) and XL
+(656 mm), both over the 250 mm usable bed in width alone.
 
 ## Testing (protocol stub)
 
@@ -228,8 +257,6 @@ list in the same change.
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
 | `INTERLOCK_DOVETAIL_WIDTH_MM` | Dovetail width — tight because a 5 mm tall, 45° dovetail spreads ~10 mm wider across its height, against only a 15 mm side zone (`INTERLOCK_SIDE_ZONE_MM`) |
 | `INTERLOCK_END_OF_TRAVEL_DETENT` | Mechanism and dimensions for the end-of-travel detent |
-| `SPLIT_JOINT_TYPE` | Mechanism (if any) for rejoining a split part — butt+glue, dowel, tab-and-slot, screw bosses, etc. |
-| `SPLIT_JOINT_FEATURE_SIZE_MM` | Characteristic size of whichever joint `SPLIT_JOINT_TYPE` ends up being |
 
 Also explicitly out of scope for now, per the brief, rather than open
 questions to resolve:
