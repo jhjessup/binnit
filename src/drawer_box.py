@@ -94,7 +94,8 @@ def main() -> Path:
     out_dir = REPO_ROOT / "build"
     out_dir.mkdir(exist_ok=True)
     out_path = out_dir / f"drawer_box_{size}_d{depth_units}_f{floors}.stl"
-    export_stl(part, str(out_path))
+    export_stl(part, str(out_path), tolerance=P.STL_EXPORT_TOLERANCE_MM,
+               angular_tolerance=P.STL_EXPORT_ANGULAR_TOLERANCE)
     print(f"Wrote {out_path}")
     return out_path
 

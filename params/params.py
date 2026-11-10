@@ -445,6 +445,18 @@ PRINT_PROFILE_NOTE = (
     "documented here for traceability to the brief."
 )
 
+# STL export mesh quality — STATED decision, not a dimension of the
+# part itself. build123d's own default (tolerance=0.001mm) is far
+# finer than any FDM printer's resolution, and gets expensive fast on
+# curved features: the interlock detent's small sphere alone pushed a
+# case export from ~8KB to ~860KB at the default before this was tuned
+# down. 0.1mm linear / 0.3mm angular deflection is still well under
+# typical nozzle/layer resolution (~0.1-0.4mm) and cuts case file sizes
+# by roughly 5-8x. Every generator's export_stl() call should pass
+# these rather than relying on build123d's own default.
+STL_EXPORT_TOLERANCE_MM = 0.1           # STATED decision
+STL_EXPORT_ANGULAR_TOLERANCE = 0.3      # STATED decision (radians)
+
 # --- Splitting oversized parts (brief: "split on grid lines") ------------
 #
 # DECIDED: splits land on the 42 mm internal grid (GRID_PITCH_MM), not the
