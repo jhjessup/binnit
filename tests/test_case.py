@@ -15,10 +15,13 @@ from src.envelope import assert_fits_print_bed  # noqa: E402
 
 def _drawer_placed_in_case(size, depth_units, floors):
     """The drawer box, translated to where it should sit inside the
-    case's cavity, per params.py's stated gaps."""
+    case's cavity, per params.py's stated gaps. The 1mm gap sits BEHIND
+    the drawer (between its back wall and the case's) — the drawer's
+    front face lands exactly flush with the case's front opening."""
     d = drawer_box(size, depth_units, floors)
     z_shell_bottom = P.INTERLOCK_PAD_HEIGHT_MM
-    return d.translate((P.CASE_SIDE_TOTAL_MM, P.CASE_BACK_WALL_MM,
+    y_offset = P.CASE_BACK_WALL_MM + P.GAP_DRAWER_BACK_TO_CASE_BACK_MM
+    return d.translate((P.CASE_SIDE_TOTAL_MM, y_offset,
                          z_shell_bottom + P.CASE_TOP_BOTTOM_SKIN_MM))
 
 
@@ -45,11 +48,29 @@ def test_drawer_box_fits_case_cavity_without_interference(size, depth_units, flo
     assert overlap < 1e-6
 
 
+@pytest.mark.parametrize("size,depth_units,floors", [
+    ("S", 3, 1),
+    ("M", 4, 1),
+])
+def test_drawer_front_face_is_flush_with_case_front_opening(size, depth_units, floors):
+    # Regression guard: an earlier version of case.py put the 1mm gap
+    # at the FRONT (between the drawer's front face and the case's
+    # front opening) instead of behind the drawer, where the brief
+    # actually puts it ("drawer box sits flush with the case front").
+    # Both the cavity cut and this test's drawer placement shared that
+    # same wrong offset, so the overlap check above still passed —
+    # this checks the actual stated fact directly instead.
+    d_placed = _drawer_placed_in_case(size, depth_units, floors)
+    case_depth = P.case_depth_mm(depth_units)
+    assert d_placed.bounding_box().max.Y == pytest.approx(case_depth)
+
+
 def test_misplaced_drawer_box_is_caught_as_interference():
     # Guards against the fit check being a silent no-op.
     c = case("S", 3, 1)
     d = drawer_box("S", 3, 1)
-    d_bad = d.translate((P.CASE_SIDE_TOTAL_MM - 2.0, P.CASE_BACK_WALL_MM,
+    y_offset = P.CASE_BACK_WALL_MM + P.GAP_DRAWER_BACK_TO_CASE_BACK_MM
+    d_bad = d.translate((P.CASE_SIDE_TOTAL_MM - 2.0, y_offset,
                           P.INTERLOCK_PAD_HEIGHT_MM + P.CASE_TOP_BOTTOM_SKIN_MM))
     overlap = (c & d_bad).volume
     assert overlap > 1.0
@@ -102,3 +123,13 @@ def test_side_channel_leaves_a_real_inner_wall():
     # Sanity on params.py's own derived value: enough wall must remain
     # between the channel and the cavity to be worth calling a wall.
     assert P.case_side_inner_wall_mm() > 1.0
+
+
+# --- facer latch notch — see tests/test_facer.py for the real cross-part
+# fit check against the matching bump; these just cover the case's own side.
+
+def test_latch_notch_removes_real_material_without_changing_outer_bbox():
+    c_with = case("S", 3, 1, include_latch_notch=True)
+    c_without = case("S", 3, 1, include_latch_notch=False)
+    assert c_with.volume < c_without.volume
+    assert c_with.bounding_box().size == c_without.bounding_box().size

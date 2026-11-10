@@ -206,15 +206,34 @@ DEPTH_MAX_UNITS = 10               # STATED
 GAP_DRAWER_BACK_TO_CASE_BACK_MM = 1.0   # STATED
 GAP_ABOVE_CASE_BOTTOM_MM = 1.0          # STATED
 
-FACER_THICKNESS_MM = OpenParameter(
-    "FACER_THICKNESS_MM",
-    "Facer (latch + knob) piece sits proud of the case front; its "
-    "thickness is explicitly OPEN in the brief.",
-)
-KNOB_PROJECTION_MM = OpenParameter(
-    "KNOB_PROJECTION_MM",
-    "How far the facer's knob projects is explicitly OPEN in the brief.",
-)
+# Facer: a plate attached to the drawer box's (already flush) front
+# face, projecting forward beyond the case's own front opening by its
+# own thickness. All STATED decisions below, resolving what the brief
+# left OPEN — none of these are measured or derived.
+FACER_THICKNESS_MM = 3.0           # STATED decision — reuses
+                                   # CASE_TOP_BOTTOM_SKIN_MM's value for
+                                   # consistency with the rest of the
+                                   # design, not an independent guess
+KNOB_DIAMETER_MM = 16.0            # STATED decision — plain cylindrical
+                                   # knob, roughly a common drawer-pull size
+KNOB_PROJECTION_MM = 12.0          # STATED decision — resolves the
+                                   # brief's OPEN item
+
+# Latch: not a security lock — a small tactile detent so the drawer
+# doesn't drift open on its own (in transit, hanging on a bar), same
+# family as the interlock's end-of-travel detent (see its comment for
+# the same rigid-CAD-can't-model-elastic-give caveat, which applies
+# here too). A bump centered on the facer's TOP face, projecting
+# upward (+Z) past the drawer's own top surface, into the 1mm gap that
+# case_interior_height_mm() leaves above the drawer (GAP_ABOVE_CASE_
+# BOTTOM_MM — the drawer sits flush at the cavity's bottom, so that 1mm
+# lives above it, not below, despite the constant's name) and slightly
+# beyond it, engaging a shallow notch cut into the underside of the
+# case's top skin right at the front opening. The bump's radius is
+# deliberately bigger than that 1mm nominal clearance (same reasoning
+# as the interlock detent) — it has to interfere with the plain
+# underside everywhere except the one designed spot to do anything.
+FACER_LATCH_BUMP_RADIUS_MM = 1.5          # STARTING — untested
 
 
 def grid_depth_mm(depth_units: int) -> float:

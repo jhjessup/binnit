@@ -95,8 +95,16 @@ Formulas:
 - 1 mm vertical gap above the case bottom
   (`GAP_ABOVE_CASE_BOTTOM_MM`, STATED)
 - The drawer box sits flush with the case front; a separate facer piece
-  (latch + knob) sits proud of it. Facer thickness and knob projection
-  are **OPEN** (`FACER_THICKNESS_MM`, `KNOB_PROJECTION_MM`).
+  (latch + knob) sits proud of it. **RESOLVED** (`src/facer.py`): facer
+  thickness **3 mm** (`FACER_THICKNESS_MM`, reuses `CASE_TOP_BOTTOM_SKIN_MM`'s
+  value), knob **16 mm** diameter x **12 mm** projection
+  (`KNOB_DIAMETER_MM`, `KNOB_PROJECTION_MM` — resolves the brief's OPEN
+  item), latch as a tactile detent bump, not a lock (see
+  "Facer geometry" below). All STATED decisions, not measured.
+  Fixing a real bug while placing the facer: an earlier version of
+  `src/case.py` put the drawer's 1mm back gap at the *front* instead
+  (see `case()`'s own comment) — caught only once the facer's exact
+  attachment plane actually had to be computed.
 
 ## Height
 
@@ -222,9 +230,40 @@ depth, or profile beyond that, so the split is a decision made when
 `src/case.py` was built, not a transcribed fact. The drawer box has no
 matching feature; `src/drawer_box.py` is unchanged.
 
-The case is open at the front (no front wall) for the drawer box and a
-future facer (`FACER_THICKNESS_MM` / `KNOB_PROJECTION_MM`, still OPEN —
-not built).
+The case is open at the front (no front wall) for the drawer box and
+the facer (`src/facer.py`, see below).
+
+### Facer geometry (`src/facer.py`)
+
+The facer's plate spans `drawer_box_outside_width_mm(size)` — but its
+HEIGHT is `facer_height_mm(floors)`, which equals
+`case_interior_height_mm(floors)`, not `drawer_box_outside_height_mm(floors)`
+directly. Those two differ by exactly the same 1 mm
+(`GAP_ABOVE_CASE_BOTTOM_MM`) that lives above the drawer once it's
+placed flush at the cavity's bottom — a facer sized to only the
+drawer's own height would leave a sliver of the case's interior
+visible above it, and (the thing that actually forced this) its own
+top edge would sit 1 mm short of the cavity's ceiling, too short for
+the latch bump below to ever reach what it's supposed to catch on.
+
+The **latch** (a tactile detent, not a security lock — resisting drift
+in transit or on a bar, same "rigid CAD can't model elastic give"
+caveat as the interlock's own detent) is a small bump
+(`FACER_LATCH_BUMP_RADIUS_MM`, STARTING) centered exactly at
+`(width/2, 0, facer_height)` — the facer's own back-top **corner**, not
+a point centered within its plate. Both coordinates being exactly at a
+boundary is load-bearing to the design, not incidental: the facer's
+whole volume sits at y≥0 (forward of the case's opening, once
+attached) and the case's whole volume sits at y≤0 in that same frame —
+a bump centered mid-plate can never geometrically cross back to touch
+anything on the case, at any height. Centering it at y=0 (and at
+z=facer_height, clear of the drawer's own shorter height) is what lets
+part of the sphere reach the skin's exposed front-bottom corner at
+all. `src/case.py` cuts the matching notch at the identical position,
+enlarged by `INTERLOCK_SLIDING_CLEARANCE_MM` (reused, not a new
+number). Both tested directly in `tests/test_facer.py`: the bump
+genuinely interferes with a case built without the notch, and clears
+cleanly with it.
 
 ## Printing
 
@@ -336,9 +375,8 @@ list in the same change.
 |---|---|
 | `SIZES["L"].default_depth_units` | Rounding rule for "about two thirds of width in units" (10 × 2/3 = 6.67) |
 | `SIZES["XL"].default_depth_units` | Same rounding rule, for 14 × 2/3 = 9.33 |
-| `FACER_THICKNESS_MM` | Thickness of the facer (latch + knob) piece |
-| `KNOB_PROJECTION_MM` | How far the facer's knob projects |
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
+| *(the insert, as a component)* | No param name yet — the brief only gives `INSERT_SIDE_CHANNEL_MM` (the insert's side channel widths); its overall shape and role (a liner inside the case? a tray inside the drawer? something else?) isn't described anywhere, and asking didn't resolve it this round — deferred, not modeled |
 
 Also explicitly out of scope for now, per the brief, rather than open
 questions to resolve:
