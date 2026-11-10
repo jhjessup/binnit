@@ -84,6 +84,13 @@ STEP/STL or its code.
    .venv/bin/pytest tests/ -v
    .venv/bin/python src/drawer_box.py   # or whichever generator you touched
    ```
+   To actually look at the result, open [`tools/bench.html`](../tools/bench.html)
+   in a browser (no server needed) and drag the generated STL from
+   `/build` onto it — rotate/zoom/pan, read its bounding box and
+   approximate volume, check it against the print-bed envelope, and
+   measure between two points. Useful for eyeballing something a
+   passing test can still miss, like whether a split joint's chevron
+   teeth actually look right.
 5. **Open the PR.** CI (`.github/workflows/build.yml`) re-runs the test
    suite, regenerates the STL(s), and attaches them as a build artifact
    so reviewers can look at the actual part without owning a slicer.

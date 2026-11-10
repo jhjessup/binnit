@@ -29,6 +29,7 @@ full design spec, including an explicit list of open/undecided values.
 /src       parametric modules (drawer box, case, insert, interlock)
 /params    shared dimensions — the single source of truth
 /tests     fit and envelope checks
+/tools     bench.html — offline STL viewer for visually checking a build
 /docs      DESIGN.md, CONTRIBUTING.md, AI_GUIDE.md
 /.github   workflows, issue and PR templates
 ```
