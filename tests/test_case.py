@@ -1,0 +1,79 @@
+"""Fit checks for the case generator (src/case.py)."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import pytest  # noqa: E402
+
+from params import params as P  # noqa: E402
+from src.case import case  # noqa: E402
+from src.drawer_box import drawer_box  # noqa: E402
+from src.envelope import assert_fits_print_bed  # noqa: E402
+
+
+def _drawer_placed_in_case(size, depth_units, floors):
+    """The drawer box, translated to where it should sit inside the
+    case's cavity, per params.py's stated gaps."""
+    d = drawer_box(size, depth_units, floors)
+    z_shell_bottom = P.INTERLOCK_PAD_HEIGHT_MM
+    return d.translate((P.CASE_SIDE_TOTAL_MM, P.CASE_BACK_WALL_MM,
+                         z_shell_bottom + P.CASE_TOP_BOTTOM_SKIN_MM))
+
+
+@pytest.mark.parametrize("size,depth_units,floors", [
+    ("S", 3, 1),
+    ("M", 4, 1),
+])
+def test_case_outside_bbox_matches_params(size, depth_units, floors):
+    c = case(size, depth_units, floors)
+    bb = c.bounding_box()
+    assert bb.size.X == P.SIZES[size].case_outside_width_mm
+    assert bb.size.Y == P.case_depth_mm(depth_units)
+    assert bb.size.Z == P.case_outside_height_mm(floors)
+
+
+@pytest.mark.parametrize("size,depth_units,floors", [
+    ("S", 3, 1),
+    ("M", 4, 1),
+])
+def test_drawer_box_fits_case_cavity_without_interference(size, depth_units, floors):
+    c = case(size, depth_units, floors)
+    d_placed = _drawer_placed_in_case(size, depth_units, floors)
+    overlap = (c & d_placed).volume
+    assert overlap < 1e-6
+
+
+def test_misplaced_drawer_box_is_caught_as_interference():
+    # Guards against the fit check being a silent no-op.
+    c = case("S", 3, 1)
+    d = drawer_box("S", 3, 1)
+    d_bad = d.translate((P.CASE_SIDE_TOTAL_MM - 2.0, P.CASE_BACK_WALL_MM,
+                          P.INTERLOCK_PAD_HEIGHT_MM + P.CASE_TOP_BOTTOM_SKIN_MM))
+    overlap = (c & d_bad).volume
+    assert overlap > 1.0
+
+
+def test_connectors_add_real_material():
+    c_with = case("S", 3, 1, include_connectors=True)
+    c_without = case("S", 3, 1, include_connectors=False)
+    assert c_with.volume > c_without.volume
+
+
+def test_plain_shell_without_connectors_matches_skin_only_height():
+    c = case("S", 3, 1, include_connectors=False)
+    bb = c.bounding_box()
+    expected_height = 2 * P.CASE_TOP_BOTTOM_SKIN_MM + P.case_interior_height_mm(1)
+    assert bb.size.Z == pytest.approx(expected_height)
+    assert bb.min.Z == pytest.approx(0.0, abs=1e-6)
+
+
+def test_s_case_fits_print_bed():
+    c = case("S", 3, 1)
+    assert_fits_print_bed(c, label="S case, depth 3, 1 floor")
+
+
+def test_unknown_size_raises():
+    with pytest.raises(ValueError):
+        case("XXL", 3, 1)

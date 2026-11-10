@@ -148,8 +148,60 @@ Binnit's own design — not Vault-compatible.
 - Smaller cases may stack on larger ones — including shallower on
   deeper — on the shared 164 mm bay pitch.
 - Available side zone for the connector: **15 mm**
-  (`INTERLOCK_SIDE_ZONE_MM`, STATED) — this is the constraint that makes
-  dovetail width an open question (see below).
+  (`INTERLOCK_SIDE_ZONE_MM`, STATED) — the same physical 15 mm as the
+  case's own side wall (`CASE_SIDE_TOTAL_MM`), not a coincidence: the
+  end connector lines sit within that wall.
+- Dovetail root width: **3 mm**, at the narrow end where the rail meets
+  the skin (`INTERLOCK_DOVETAIL_WIDTH_MM`, **STATED decision** — resolved
+  from OPEN; see `dovetail_wide_width_mm()` in `params.py`). A 5 mm tall,
+  45° dovetail spreads 10 mm wider across its height, so root width + 10 mm
+  must fit inside the 15 mm zone; 3 mm leaves 1 mm margin per side (13 mm
+  wide end). Chosen for a bit of printable margin, not derived — flagged
+  STARTING like the sliding clearance, pending a real print/load test.
+  `INTERLOCK_END_OF_TRAVEL_DETENT` remains OPEN; no detent is built.
+
+### Interlock and case geometry (`src/interlock.py`, `src/case.py`)
+
+The rail (male, protrudes from a case's top skin) and the pad+groove
+(female, hangs below a case's bottom skin) share one dovetail
+cross-section, oriented so a **flush-skin stack** (the two cases' skins
+touch directly — the connector doesn't add extra separation) nests
+correctly: the rail is narrow at its base and wide at its tip; the
+groove, in the pad's own frame, is wide at its attachment-to-skin face
+and narrow at its tip — the *opposite* taper assignment from the rail,
+not a mirror of it. Getting this backwards was a real bug caught by
+`tests/test_interlock.py`'s fit check (stack a rail and a groove,
+confirm zero overlap at the correct clearance, confirm a deliberate
+lateral misalignment *does* show up as interference — so the check
+can't be a silent no-op).
+
+Connector lines run the **full case depth**, flush with both the front
+and back faces (`ASSUMPTION`, not stated in the brief — needed to give
+the connector a length; front-referencing is what lets a shallower
+case's connector still line up with a deeper case's, per the brief's
+"shallower on deeper" stacking allowance).
+
+Connector line **positions** follow the stated n+1-per-bay rule, with
+one DERIVED adjustment: the two end lines are inset by half
+`INTERLOCK_SIDE_ZONE_MM` so their footprint lands inside the case's own
+side wall instead of straddling the outer edge; interior lines (for
+M/L/XL) need no adjustment since they sit on the continuous top/bottom
+skin, which spans the case's full width regardless of bay position.
+
+**Case height**, for any floor count, is a FORMULA — not stated directly
+in the brief, but reconciled exactly against the one number it does
+give (the 4-floor case's 185 mm interior):
+`drawer_box_outside_height_mm(floors) + GAP_ABOVE_CASE_BOTTOM_MM` gives
+184 + 1 = 185 mm for 4 floors, matching `CASE_4FLOOR_INTERIOR_MM`
+exactly (`case_interior_height_mm()`, checked at import time by
+`_validate_case_4floor_height_reconciles()`). Outside height then adds
+both skins and both connectors (`case_outside_height_mm()`).
+
+**Case side walls** are plain thickness in v1 — the brief gives 15 mm
+total "including slide channels" but no channel width, depth, or
+profile, so no slide-channel feature is cut; that geometry is a future
+decision, not modeled yet. The case is open at the front (no front
+wall) for the drawer box and a future facer (OPEN, not built).
 
 ## Printing
 
@@ -264,8 +316,8 @@ list in the same change.
 | `FACER_THICKNESS_MM` | Thickness of the facer (latch + knob) piece |
 | `KNOB_PROJECTION_MM` | How far the facer's knob projects |
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
-| `INTERLOCK_DOVETAIL_WIDTH_MM` | Dovetail width — tight because a 5 mm tall, 45° dovetail spreads ~10 mm wider across its height, against only a 15 mm side zone (`INTERLOCK_SIDE_ZONE_MM`) |
 | `INTERLOCK_END_OF_TRAVEL_DETENT` | Mechanism and dimensions for the end-of-travel detent |
+| *(case side wall slide-channel profile)* | No param name yet — the brief gives 15 mm total per side "including slide channels" but no channel width/depth/profile; v1's case shell treats it as plain wall thickness instead of guessing a cutout |
 
 Also explicitly out of scope for now, per the brief, rather than open
 questions to resolve:

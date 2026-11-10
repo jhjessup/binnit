@@ -278,16 +278,42 @@ INTERLOCK_SLIDING_CLEARANCE_MM = 0.3   # STARTING — per side; untested
 INTERLOCK_SIDE_ZONE_MM = 15.0          # STATED — available width at the bay
                                        # edge for the connector
 
-INTERLOCK_DOVETAIL_WIDTH_MM = OpenParameter(
-    "INTERLOCK_DOVETAIL_WIDTH_MM",
-    "A 5 mm tall, 45-degree dovetail spreads ~10 mm wider across its "
-    "height, and the side zone is only 15 mm (INTERLOCK_SIDE_ZONE_MM) — "
-    "brief flags the actual width as OPEN given that tight margin.",
-)
+INTERLOCK_DOVETAIL_WIDTH_MM = 3.0   # STATED decision — see note below
+# This is the dovetail's width at its ROOT (narrow end, where the rail
+# meets the top skin / the groove meets the pad) — not the wide end it
+# flares out to over its 5 mm height. Chosen, not measured: a 5 mm tall,
+# 45-degree dovetail spreads 2 * 5 * tan(45) = 10 mm wider across its
+# height (see dovetail_wide_width_mm()), and the available side zone is
+# only 15 mm (INTERLOCK_SIDE_ZONE_MM) — so root width + 10 mm must fit
+# inside 15 mm. 3 mm leaves 1 mm margin per side (13 mm wide end inside
+# the 15 mm zone); 4 mm would leave only 0.5 mm/side, 5 mm leaves none.
+# Picked for a bit of printable margin, not derived from a stated fact —
+# flagged STARTING like INTERLOCK_SLIDING_CLEARANCE_MM: a real print/load
+# test (see the stand/hang test stubs) could still move this.
 INTERLOCK_END_OF_TRAVEL_DETENT = OpenParameter(
     "INTERLOCK_END_OF_TRAVEL_DETENT",
-    "Mechanism and dimensions for the end-of-travel detent are OPEN.",
+    "Mechanism and dimensions for the end-of-travel detent are OPEN. "
+    "src/interlock.py builds the rail/groove without one.",
 )
+
+
+def dovetail_wide_width_mm(root_width_mm: float = INTERLOCK_DOVETAIL_WIDTH_MM,
+                            rail_height_mm: float = INTERLOCK_RAIL_HEIGHT_MM,
+                            angle_deg: float = INTERLOCK_DOVETAIL_ANGLE_DEG) -> float:
+    """FORMULA: the dovetail's width at its wide end (tip of the rail /
+    opening of the groove), where root_width_mm is the narrow end. Not
+    an independent guess — it falls out of the rail height and angle."""
+    return root_width_mm + 2.0 * rail_height_mm * math.tan(math.radians(angle_deg))
+
+
+def _validate_dovetail_fits_side_zone() -> None:
+    wide = dovetail_wide_width_mm()
+    assert wide <= INTERLOCK_SIDE_ZONE_MM, (
+        f"Dovetail wide-end width {wide} mm exceeds the "
+        f"{INTERLOCK_SIDE_ZONE_MM} mm side zone — INTERLOCK_DOVETAIL_WIDTH_MM, "
+        "INTERLOCK_RAIL_HEIGHT_MM, or INTERLOCK_DOVETAIL_ANGLE_DEG changed "
+        "without rechecking this fit."
+    )
 
 # Design assumption stated in the brief: horizontal rows are assumed full;
 # partial rows (a connector line with no case on one side) are not covered
@@ -300,6 +326,53 @@ def interlock_connector_line_count(bays: int) -> int:
     """STATED rule: connectors sit at every bay boundary — n+1 lines for
     n bays, including the center line(s) over the 3 mm case skin."""
     return bays + 1
+
+
+# ---------------------------------------------------------------------------
+# Case height — FORMULA, reconciled against the one stated case-height
+# fact in the brief (the 4-floor case), not invented.
+# ---------------------------------------------------------------------------
+#
+# The brief gives the 4-floor case's interior (185 mm) and its skin/
+# connector thicknesses as separate stated facts, but never states a
+# general "case height" formula for any floor count. Reconciling them:
+#   drawer_box_outside_height_mm(4) + GAP_ABOVE_CASE_BOTTOM_MM
+#     = 184 + 1 = 185 mm == CASE_4FLOOR_INTERIOR_MM  (checked below)
+# So case interior height = drawer box outside height (for that floor
+# count) + the already-stated 1 mm bottom gap — which generalizes to any
+# floor count in FLOOR_COUNTS_OFFERED, not just 4. Case outside height
+# then stacks the two skins and the two interlock connectors (the brief
+# names these once generically under Interlock — RAIL/PAD_HEIGHT_MM —
+# and once again specifically for the 4-floor case as
+# CASE_4FLOOR_CONNECTOR_MM; both are 5 mm, confirming it's the same
+# floor-independent feature, not two different facts).
+
+def case_interior_height_mm(floors: int) -> float:
+    """FORMULA: drawer_box_outside_height_mm(floors) + the 1 mm gap above
+    the case bottom. Raises OpenParameterError for floor counts the
+    drawer box itself doesn't support (same restriction, inherited)."""
+    return drawer_box_outside_height_mm(floors) + GAP_ABOVE_CASE_BOTTOM_MM
+
+
+def case_outside_height_mm(floors: int) -> float:
+    """FORMULA: interior height + top/bottom skins + top/bottom interlock
+    connectors (rail height on top, pad height on bottom)."""
+    return (case_interior_height_mm(floors)
+            + 2.0 * CASE_TOP_BOTTOM_SKIN_MM
+            + INTERLOCK_RAIL_HEIGHT_MM
+            + INTERLOCK_PAD_HEIGHT_MM)
+
+
+def _validate_case_4floor_height_reconciles() -> None:
+    derived_interior = case_interior_height_mm(4)
+    assert derived_interior == CASE_4FLOOR_INTERIOR_MM, (
+        f"Derived 4-floor case interior height {derived_interior} mm != "
+        f"the brief's stated CASE_4FLOOR_INTERIOR_MM ({CASE_4FLOOR_INTERIOR_MM} mm). "
+        "Something in the height stack (DRAWER_BOX_FLOOR1_OUTSIDE_MM, "
+        "DRAWER_BOX_EXTRA_FLOOR_MM, or GAP_ABOVE_CASE_BOTTOM_MM) no longer "
+        "reconciles with that stated fact — check before trusting "
+        "case_outside_height_mm() for any floor count."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +474,8 @@ SPLIT_JOINT_TIP_RELIEF_MM = SPLIT_JOINT_CLEARANCE_MM
 # ---------------------------------------------------------------------------
 
 validate_width_addition_rule()
+_validate_dovetail_fits_side_zone()
+_validate_case_4floor_height_reconciles()
 
 
 if __name__ == "__main__":
