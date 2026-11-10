@@ -109,3 +109,40 @@ def test_end_connector_lines_stay_within_the_side_wall():
         case_outside_width = bays * P.BAY_PITCH_MM
         assert positions[0] - half_zone >= -1e-9
         assert positions[-1] + half_zone <= case_outside_width + 1e-9
+
+
+# --- end-of-travel detent: bump on the rail, matching dimple in the groove --
+
+def test_detent_boss_and_dimple_still_fit_at_designed_position():
+    # With the detent enabled (the default), the boss must still nest
+    # cleanly into its matching dimple when stacked at the correct spot
+    # — not just the plain dovetail body, which the earlier tests above
+    # already cover with with_detent implicitly on.
+    r = rail(100.0)
+    p = pad_with_groove(100.0)
+    p_stacked = p.translate((0, 0, P.INTERLOCK_RAIL_HEIGHT_MM))
+    assert (r & p_stacked).volume < 1e-6
+
+
+def test_detent_boss_interferes_with_a_plain_groove():
+    # The real mechanical check: a boss with no matching dimple to seat
+    # into must actually interfere with the groove's plain wall — this
+    # is what proves the detent is doing real work, not just sitting in
+    # ordinary clearance. A rigid CAD boolean can't represent the
+    # elastic "push past it" give of a real snap fit, so this is
+    # deliberately checked as interference rather than asserted away —
+    # see params.py's INTERLOCK_DETENT_* comment.
+    r = rail(100.0)                                   # boss enabled
+    p_no_dimple = pad_with_groove(100.0, with_detent=False)   # no matching cut
+    p_stacked = p_no_dimple.translate((0, 0, P.INTERLOCK_RAIL_HEIGHT_MM))
+    assert (r & p_stacked).volume > 0.5
+
+
+def test_detent_can_be_disabled_on_both_sides():
+    r = rail(100.0, with_detent=False)
+    p = pad_with_groove(100.0, with_detent=False)
+    p_stacked = p.translate((0, 0, P.INTERLOCK_RAIL_HEIGHT_MM))
+    assert (r & p_stacked).volume < 1e-6
+    # and disabling it should mean the rail has no boss sticking out at all:
+    r_with = rail(100.0, with_detent=True)
+    assert r_with.volume > r.volume

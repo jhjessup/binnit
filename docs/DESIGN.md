@@ -158,7 +158,19 @@ Binnit's own design — not Vault-compatible.
   must fit inside the 15 mm zone; 3 mm leaves 1 mm margin per side (13 mm
   wide end). Chosen for a bit of printable margin, not derived — flagged
   STARTING like the sliding clearance, pending a real print/load test.
-  `INTERLOCK_END_OF_TRAVEL_DETENT` remains OPEN; no detent is built.
+- End-of-travel detent: a small (**1 mm radius**) spherical bump on each
+  rail's +X flank, matched by an enlarged dimple in the groove at the
+  same position — **5 mm in from the back end** (where the connector
+  sits once fully slid home), at the **midpoint** of the dovetail's
+  height taper (`INTERLOCK_DETENT_RADIUS_MM`, `_OFFSET_FROM_BACK_MM`,
+  `_HEIGHT_FRACTION` — all STATED decisions, resolved from OPEN). A
+  real caveat: a rigid CAD boolean can't represent a snap-fit's elastic
+  "push past it" give — the bump is sized larger than the sliding
+  clearance on purpose, so it genuinely interferes with a *plain*
+  groove wall everywhere except the one spot with a matching dimple
+  (`tests/test_interlock.py` checks this directly: the boss against a
+  plain groove shows real interference, and against the matching
+  dimple shows none).
 
 ### Interlock and case geometry (`src/interlock.py`, `src/case.py`)
 
@@ -197,11 +209,22 @@ exactly (`case_interior_height_mm()`, checked at import time by
 `_validate_case_4floor_height_reconciles()`). Outside height then adds
 both skins and both connectors (`case_outside_height_mm()`).
 
-**Case side walls** are plain thickness in v1 — the brief gives 15 mm
-total "including slide channels" but no channel width, depth, or
-profile, so no slide-channel feature is cut; that geometry is a future
-decision, not modeled yet. The case is open at the front (no front
-wall) for the drawer box and a future facer (OPEN, not built).
+**Case side slide channels**: a blind pocket cut into each side wall's
+*outer* face — `CASE_SIDE_OUTER_WALL_MM` (3 mm) stays solid outside it,
+`CASE_SIDE_CHANNEL_DEPTH_MM` (**6 mm**, STATED decision) is removed, and
+`case_side_inner_wall_mm()` (15 − 3 − 6 = **6 mm**, FORMULA, validated
+`> 0` at import time) stays solid facing the drawer cavity. Inset from
+the case's front/back and top/bottom by `CASE_SIDE_CHANNEL_Y_MARGIN_MM`
+/ `_Z_MARGIN_MM` (5 mm each, STATED decisions) so it never breaches an
+opening. This is a relief/weight feature, not a mating rail — the brief
+gives the 15 mm total and the 3 mm outer wall but no channel width,
+depth, or profile beyond that, so the split is a decision made when
+`src/case.py` was built, not a transcribed fact. The drawer box has no
+matching feature; `src/drawer_box.py` is unchanged.
+
+The case is open at the front (no front wall) for the drawer box and a
+future facer (`FACER_THICKNESS_MM` / `KNOB_PROJECTION_MM`, still OPEN —
+not built).
 
 ## Printing
 
@@ -316,8 +339,6 @@ list in the same change.
 | `FACER_THICKNESS_MM` | Thickness of the facer (latch + knob) piece |
 | `KNOB_PROJECTION_MM` | How far the facer's knob projects |
 | `HEIGHT_STACK_GAP_MM` | Whether/where a 1 mm gap exists in the height stack, and its size |
-| `INTERLOCK_END_OF_TRAVEL_DETENT` | Mechanism and dimensions for the end-of-travel detent |
-| *(case side wall slide-channel profile)* | No param name yet — the brief gives 15 mm total per side "including slide channels" but no channel width/depth/profile; v1's case shell treats it as plain wall thickness instead of guessing a cutout |
 
 Also explicitly out of scope for now, per the brief, rather than open
 questions to resolve:

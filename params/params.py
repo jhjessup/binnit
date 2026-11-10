@@ -153,6 +153,26 @@ CASE_SIDE_TOTAL_MM = 15.0          # MEASURED (reference) — per side, includes
 CASE_SIDE_OUTER_WALL_MM = 3.0      # MEASURED (reference) — outer wall on the
                                    # outside of each slide-channel cutout,
                                    # included within CASE_SIDE_TOTAL_MM above
+
+# Slide channel: a blind pocket cut into each side wall's OUTER face,
+# starting CASE_SIDE_OUTER_WALL_MM in from the outside (that much stays
+# solid) and stopping before reaching the drawer cavity (so the inner
+# wall facing the drawer also stays solid — this is a relief/weight
+# feature, not a mating rail; the drawer box doesn't need a matching
+# feature and src/drawer_box.py is unchanged). The brief gives the 15 mm
+# total and the 3 mm outer wall but no channel depth or profile — this
+# split (3 mm outer wall / 6 mm channel / 6 mm inner wall) is a STATED
+# decision made when this generator was built, not a transcribed fact.
+CASE_SIDE_CHANNEL_DEPTH_MM = 6.0        # STATED decision
+CASE_SIDE_CHANNEL_Y_MARGIN_MM = 5.0     # STATED decision — inset from the
+                                         # case's front opening and back
+                                         # wall so the channel doesn't
+                                         # breach either
+CASE_SIDE_CHANNEL_Z_MARGIN_MM = 5.0     # STATED decision — inset from the
+                                         # top and bottom of the shell so
+                                         # the channel doesn't undercut
+                                         # the skins
+
 CASE_TOP_BOTTOM_SKIN_MM = 3.0      # MEASURED (reference)
 CASE_BACK_WALL_MM = 2.0            # ASSUMPTION — stated explicitly as an
                                    # assumption in the brief, not measured
@@ -290,11 +310,29 @@ INTERLOCK_DOVETAIL_WIDTH_MM = 3.0   # STATED decision — see note below
 # Picked for a bit of printable margin, not derived from a stated fact —
 # flagged STARTING like INTERLOCK_SLIDING_CLEARANCE_MM: a real print/load
 # test (see the stand/hang test stubs) could still move this.
-INTERLOCK_END_OF_TRAVEL_DETENT = OpenParameter(
-    "INTERLOCK_END_OF_TRAVEL_DETENT",
-    "Mechanism and dimensions for the end-of-travel detent are OPEN. "
-    "src/interlock.py builds the rail/groove without one.",
-)
+# End-of-travel detent — STATED decision: a small bump on the rail,
+# matched by a slightly-larger dimple cut into the groove at the same
+# position, near the back end (where the connector sits once fully
+# slid home — see src/interlock.py's module docstring on the front-to-
+# back assembly motion). Self-contained within the rail/groove parts
+# (not the case shell): placed at a fixed fraction of the dovetail's
+# own height-taper, so the two line up once stacked regardless of
+# which case sizes are paired.
+#
+# A real caveat, not glossed over: a rigid CAD boolean can't represent
+# the elastic "push past it" feel of a plastic snap detent — the bump
+# is deliberately sized larger than the nominal sliding clearance, so
+# a literal rigid intersection check WOULD show interference everywhere
+# along the slide except at the exact designed position (where the
+# dimple is enlarged to match). That's the intended behavior, not a
+# bug; tests/test_interlock.py checks fit at the designed position only.
+INTERLOCK_DETENT_RADIUS_MM = 1.0              # STARTING — untested, like
+                                               # the sliding clearance
+INTERLOCK_DETENT_OFFSET_FROM_BACK_MM = 5.0    # STATED decision — close to
+                                               # full engagement, not
+                                               # partway through the slide
+INTERLOCK_DETENT_HEIGHT_FRACTION = 0.5        # STATED decision — midway
+                                               # up the dovetail's taper
 
 
 def dovetail_wide_width_mm(root_width_mm: float = INTERLOCK_DOVETAIL_WIDTH_MM,
@@ -313,6 +351,24 @@ def _validate_dovetail_fits_side_zone() -> None:
         f"{INTERLOCK_SIDE_ZONE_MM} mm side zone — INTERLOCK_DOVETAIL_WIDTH_MM, "
         "INTERLOCK_RAIL_HEIGHT_MM, or INTERLOCK_DOVETAIL_ANGLE_DEG changed "
         "without rechecking this fit."
+    )
+
+
+def case_side_inner_wall_mm() -> float:
+    """FORMULA: what's left of the 15 mm side allowance after the outer
+    wall and the slide-channel pocket — the solid wall still facing the
+    drawer cavity."""
+    return CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM - CASE_SIDE_CHANNEL_DEPTH_MM
+
+
+def _validate_case_side_channel_leaves_inner_wall() -> None:
+    inner = case_side_inner_wall_mm()
+    assert inner > 0, (
+        f"CASE_SIDE_OUTER_WALL_MM + CASE_SIDE_CHANNEL_DEPTH_MM "
+        f"({CASE_SIDE_OUTER_WALL_MM + CASE_SIDE_CHANNEL_DEPTH_MM} mm) must stay "
+        f"under CASE_SIDE_TOTAL_MM ({CASE_SIDE_TOTAL_MM} mm) — the channel pocket "
+        "can't consume the whole side wall and still leave it solid against "
+        "the drawer cavity."
     )
 
 # Design assumption stated in the brief: horizontal rows are assumed full;
@@ -476,6 +532,7 @@ SPLIT_JOINT_TIP_RELIEF_MM = SPLIT_JOINT_CLEARANCE_MM
 validate_width_addition_rule()
 _validate_dovetail_fits_side_zone()
 _validate_case_4floor_height_reconciles()
+_validate_case_side_channel_leaves_inner_wall()
 
 
 if __name__ == "__main__":

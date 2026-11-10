@@ -77,3 +77,28 @@ def test_s_case_fits_print_bed():
 def test_unknown_size_raises():
     with pytest.raises(ValueError):
         case("XXL", 3, 1)
+
+
+# --- side slide channels (relief pockets, not a mating rail) --------------
+
+def test_side_channels_remove_real_material_without_changing_outer_bbox():
+    c_with = case("S", 3, 1, include_side_channels=True)
+    c_without = case("S", 3, 1, include_side_channels=False)
+    assert c_with.volume < c_without.volume
+    # Blind pockets — the outer envelope must be identical either way.
+    assert c_with.bounding_box().size == c_without.bounding_box().size
+
+
+def test_side_channels_stay_blind_and_dont_reach_the_cavity():
+    # The channel must not breach into the drawer cavity — confirmed by
+    # the drawer box (placed exactly where it belongs) still showing
+    # zero interference with a case that HAS channels cut.
+    c = case("S", 3, 1, include_side_channels=True)
+    d_placed = _drawer_placed_in_case("S", 3, 1)
+    assert (c & d_placed).volume < 1e-6
+
+
+def test_side_channel_leaves_a_real_inner_wall():
+    # Sanity on params.py's own derived value: enough wall must remain
+    # between the channel and the cavity to be worth calling a wall.
+    assert P.case_side_inner_wall_mm() > 1.0
