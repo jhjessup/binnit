@@ -154,24 +154,38 @@ CASE_SIDE_OUTER_WALL_MM = 3.0      # MEASURED (reference) — outer wall on the
                                    # outside of each slide-channel cutout,
                                    # included within CASE_SIDE_TOTAL_MM above
 
-# Slide channel: a blind pocket cut into each side wall's OUTER face,
-# starting CASE_SIDE_OUTER_WALL_MM in from the outside (that much stays
-# solid) and stopping before reaching the drawer cavity (so the inner
-# wall facing the drawer also stays solid — this is a relief/weight
-# feature, not a mating rail; the drawer box doesn't need a matching
-# feature and src/drawer_box.py is unchanged). The brief gives the 15 mm
-# total and the 3 mm outer wall but no channel depth or profile — this
-# split (3 mm outer wall / 6 mm channel / 6 mm inner wall) is a STATED
-# decision made when this generator was built, not a transcribed fact.
-CASE_SIDE_CHANNEL_DEPTH_MM = 6.0        # STATED decision
-CASE_SIDE_CHANNEL_Y_MARGIN_MM = 5.0     # STATED decision — inset from the
-                                         # case's front opening and back
-                                         # wall so the channel doesn't
-                                         # breach either
-CASE_SIDE_CHANNEL_Z_MARGIN_MM = 5.0     # STATED decision — inset from the
-                                         # top and bottom of the shell so
-                                         # the channel doesn't undercut
-                                         # the skins
+# Slide mechanism: a real 3-member telescoping slide (fixed case rail +
+# floating intermediate rail + fixed drawer rail), not a cosmetic relief
+# pocket — an earlier version of this file described a blind weight-
+# relief pocket here; that was replaced once research into how full-
+# extension drawer slides work in general (three-member telescoping,
+# a well-known mechanical pattern — see src/slide.py's module docstring)
+# made clear the 15 mm "including slide channels" allowance is meant to
+# physically house the mechanism, not just save material.
+#
+# Each of the two dovetail interfaces (case<->intermediate,
+# intermediate<->drawer) uses the SAME angle and clearance already
+# established for the interlock connector (INTERLOCK_DOVETAIL_ANGLE_DEG,
+# INTERLOCK_SLIDING_CLEARANCE_MM) — reused, not duplicated, since it's
+# the same kind of captured sliding joint. Root width and engagement
+# height are new, STATED decisions sized to fit twice (plus the
+# intermediate's own solid core) inside the channel budget of
+# CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM = 12 mm: 2 mm engagement
+# each side leaves an 8 mm solid core in the intermediate rail — see
+# slide_intermediate_thickness_mm() below.
+SLIDE_RAIL_HEIGHT_MM = 2.0          # STATED decision — engagement depth,
+                                     # each of the two interfaces
+SLIDE_RAIL_ROOT_WIDTH_MM = 6.0      # STATED decision — narrow-end width
+SLIDE_DRAWER_RAIL_LENGTH_MM = 20.0  # STATED decision — the drawer's own
+                                     # rail is short and fixed-length,
+                                     # not scaled to case depth
+SLIDE_Y_MARGIN_MM = 5.0             # STATED decision — inset from the
+                                     # case's front opening and back wall
+                                     # so the case rail doesn't breach
+                                     # either (reused name/spirit from
+                                     # the old CASE_SIDE_CHANNEL_Y_MARGIN_MM)
+SLIDE_Z_MARGIN_MM = 5.0             # STATED decision — inset from the
+                                     # top and bottom of the shell
 
 CASE_TOP_BOTTOM_SKIN_MM = 3.0      # MEASURED (reference)
 CASE_BACK_WALL_MM = 2.0            # ASSUMPTION — stated explicitly as an
@@ -373,21 +387,50 @@ def _validate_dovetail_fits_side_zone() -> None:
     )
 
 
-def case_side_inner_wall_mm() -> float:
-    """FORMULA: what's left of the 15 mm side allowance after the outer
-    wall and the slide-channel pocket — the solid wall still facing the
-    drawer cavity."""
-    return CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM - CASE_SIDE_CHANNEL_DEPTH_MM
+def slide_intermediate_thickness_mm() -> float:
+    """FORMULA: the intermediate rail's plate spans the ENTIRE channel
+    budget left after the outer wall — from the case rail's own
+    reference face to the drawer rail's own reference face, with
+    nothing left over. Its solid core, after both dovetail grooves are
+    cut into it, is this minus both engagement depths — see
+    _validate_slide_intermediate_has_a_real_core() below."""
+    return CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM
 
 
-def _validate_case_side_channel_leaves_inner_wall() -> None:
-    inner = case_side_inner_wall_mm()
-    assert inner > 0, (
-        f"CASE_SIDE_OUTER_WALL_MM + CASE_SIDE_CHANNEL_DEPTH_MM "
-        f"({CASE_SIDE_OUTER_WALL_MM + CASE_SIDE_CHANNEL_DEPTH_MM} mm) must stay "
-        f"under CASE_SIDE_TOTAL_MM ({CASE_SIDE_TOTAL_MM} mm) — the channel pocket "
-        "can't consume the whole side wall and still leave it solid against "
-        "the drawer cavity."
+def _validate_slide_intermediate_has_a_real_core() -> None:
+    core = slide_intermediate_thickness_mm() - 2.0 * SLIDE_RAIL_HEIGHT_MM
+    assert core > 0, (
+        f"slide_intermediate_thickness_mm() ({slide_intermediate_thickness_mm()} mm) "
+        f"minus both SLIDE_RAIL_HEIGHT_MM engagements "
+        f"({2.0 * SLIDE_RAIL_HEIGHT_MM} mm) must stay positive — the two dovetail "
+        "cuts can't consume the entire intermediate rail and leave nothing solid "
+        "between them."
+    )
+
+
+def slide_case_rail_length_mm(depth_units: int) -> float:
+    """FORMULA: the case's own rail runs the case depth, inset front and
+    back by SLIDE_Y_MARGIN_MM so it doesn't breach either wall."""
+    return case_depth_mm(depth_units) - 2.0 * SLIDE_Y_MARGIN_MM
+
+
+def slide_intermediate_length_mm(depth_units: int) -> float:
+    """FORMULA: half the case rail's own length. Not a stop-tab-timed
+    full-extension calculation (src/slide.py's module docstring is
+    explicit about that simplification) — just the proportion that
+    lets the intermediate travel meaningfully along the case rail
+    while the drawer travels meaningfully along the intermediate,
+    rather than one stage dominating the other."""
+    return slide_case_rail_length_mm(depth_units) / 2.0
+
+
+def _validate_slide_lengths_nest(depth_units: int = DEPTH_MIN_UNITS) -> None:
+    assert SLIDE_DRAWER_RAIL_LENGTH_MM < slide_intermediate_length_mm(depth_units), (
+        f"SLIDE_DRAWER_RAIL_LENGTH_MM ({SLIDE_DRAWER_RAIL_LENGTH_MM} mm) must be "
+        f"shorter than slide_intermediate_length_mm({depth_units}) "
+        f"({slide_intermediate_length_mm(depth_units)} mm) at the minimum supported "
+        "depth, or the drawer's own rail can't fit within the intermediate's groove "
+        "at all."
     )
 
 # Design assumption stated in the brief: horizontal rows are assumed full;
@@ -563,7 +606,8 @@ SPLIT_JOINT_TIP_RELIEF_MM = SPLIT_JOINT_CLEARANCE_MM
 validate_width_addition_rule()
 _validate_dovetail_fits_side_zone()
 _validate_case_4floor_height_reconciles()
-_validate_case_side_channel_leaves_inner_wall()
+_validate_slide_intermediate_has_a_real_core()
+_validate_slide_lengths_nest()
 
 
 if __name__ == "__main__":

@@ -66,11 +66,17 @@ def test_drawer_front_face_is_flush_with_case_front_opening(size, depth_units, f
 
 
 def test_misplaced_drawer_box_is_caught_as_interference():
-    # Guards against the fit check being a silent no-op.
+    # Guards against the fit check being a silent no-op. The shift has
+    # to be large enough to actually reach solid material: the slide
+    # channel (x=[CASE_SIDE_OUTER_WALL_MM, CASE_SIDE_TOTAL_MM]) is now
+    # genuinely open, not a blind pocket, so a small shift that stays
+    # within that open region no longer collides with anything — only
+    # a shift reaching past the outer wall (x < CASE_SIDE_OUTER_WALL_MM)
+    # does.
     c = case("S", 3, 1)
     d = drawer_box("S", 3, 1)
     y_offset = P.CASE_BACK_WALL_MM + P.GAP_DRAWER_BACK_TO_CASE_BACK_MM
-    d_bad = d.translate((P.CASE_SIDE_TOTAL_MM - 2.0, y_offset,
+    d_bad = d.translate((P.CASE_SIDE_TOTAL_MM - 13.0, y_offset,
                           P.INTERLOCK_PAD_HEIGHT_MM + P.CASE_TOP_BOTTOM_SKIN_MM))
     overlap = (c & d_bad).volume
     assert overlap > 1.0
@@ -100,29 +106,38 @@ def test_unknown_size_raises():
         case("XXL", 3, 1)
 
 
-# --- side slide channels (relief pockets, not a mating rail) --------------
+# --- slide rails (the case's half of the 3-member telescoping slide;
+# see tests/test_slide.py for the real cross-part fit checks against
+# the intermediate rail and the drawer's own rail) -------------------
 
-def test_side_channels_remove_real_material_without_changing_outer_bbox():
-    c_with = case("S", 3, 1, include_side_channels=True)
-    c_without = case("S", 3, 1, include_side_channels=False)
+def test_slide_rails_toggle_changes_volume_without_changing_outer_bbox():
+    # include_slide_rails=False skips BOTH the channel-opening cut and
+    # the rail addition, leaving that region solid (as the whole case
+    # used to be) — so "without" has MORE material than "with" (open
+    # channel + a thin rail nets less than fully solid). Either way the
+    # outer envelope is identical; this is all internal.
+    c_with = case("S", 3, 1, include_slide_rails=True)
+    c_without = case("S", 3, 1, include_slide_rails=False)
     assert c_with.volume < c_without.volume
-    # Blind pockets — the outer envelope must be identical either way.
     assert c_with.bounding_box().size == c_without.bounding_box().size
 
 
-def test_side_channels_stay_blind_and_dont_reach_the_cavity():
-    # The channel must not breach into the drawer cavity — confirmed by
-    # the drawer box (placed exactly where it belongs) still showing
-    # zero interference with a case that HAS channels cut.
-    c = case("S", 3, 1, include_side_channels=True)
+def test_slide_rails_dont_reach_the_cavity():
+    # The rails must not protrude far enough to breach the drawer
+    # cavity — confirmed by the drawer box (placed exactly where it
+    # belongs) still showing zero interference with a case that HAS
+    # its slide rails built.
+    c = case("S", 3, 1, include_slide_rails=True)
     d_placed = _drawer_placed_in_case("S", 3, 1)
     assert (c & d_placed).volume < 1e-6
 
 
-def test_side_channel_leaves_a_real_inner_wall():
-    # Sanity on params.py's own derived value: enough wall must remain
-    # between the channel and the cavity to be worth calling a wall.
-    assert P.case_side_inner_wall_mm() > 1.0
+def test_slide_intermediate_rail_has_a_real_core():
+    # Sanity on params.py's own derived value: enough solid material
+    # must remain in the intermediate rail's plate after both dovetail
+    # grooves are cut, or there'd be nothing holding it together.
+    core = P.slide_intermediate_thickness_mm() - 2.0 * P.SLIDE_RAIL_HEIGHT_MM
+    assert core > 1.0
 
 
 # --- facer latch notch — see tests/test_facer.py for the real cross-part

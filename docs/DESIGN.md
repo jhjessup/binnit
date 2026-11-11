@@ -217,21 +217,75 @@ exactly (`case_interior_height_mm()`, checked at import time by
 `_validate_case_4floor_height_reconciles()`). Outside height then adds
 both skins and both connectors (`case_outside_height_mm()`).
 
-**Case side slide channels**: a blind pocket cut into each side wall's
-*outer* face — `CASE_SIDE_OUTER_WALL_MM` (3 mm) stays solid outside it,
-`CASE_SIDE_CHANNEL_DEPTH_MM` (**6 mm**, STATED decision) is removed, and
-`case_side_inner_wall_mm()` (15 − 3 − 6 = **6 mm**, FORMULA, validated
-`> 0` at import time) stays solid facing the drawer cavity. Inset from
-the case's front/back and top/bottom by `CASE_SIDE_CHANNEL_Y_MARGIN_MM`
-/ `_Z_MARGIN_MM` (5 mm each, STATED decisions) so it never breaches an
-opening. This is a relief/weight feature, not a mating rail — the brief
-gives the 15 mm total and the 3 mm outer wall but no channel width,
-depth, or profile beyond that, so the split is a decision made when
-`src/case.py` was built, not a transcribed fact. The drawer box has no
-matching feature; `src/drawer_box.py` is unchanged.
+**Case side slide channels** used to be a blind cosmetic relief pocket
+here — replaced with the real slide mechanism once research into how
+full-extension drawer slides generally work (see "Drawer slide
+mechanism" below) made clear the 15 mm "including slide channels"
+allowance is meant to physically house a mechanism, not just save
+material.
 
 The case is open at the front (no front wall) for the drawer box and
 the facer (`src/facer.py`, see below).
+
+### Drawer slide mechanism (`src/slide.py`, `src/case.py`, `src/drawer_box.py`)
+
+A real 3-member telescoping slide — Binnit's own design, not Vault's.
+Researched generally (public marketing copy and a parts-list page, not
+any Vault file) to understand the *mechanism type*: Vault's own parts
+list names a Runner Guide, Runner Slide, and S Rail per drawer —
+language consistent with the classic 3-member telescoping pattern used
+in ball-bearing-free full-extension slides generally (wooden/plastic
+"Euro-style" slides use the same principle; it's generic engineering,
+not anyone's proprietary design). Binnit's own version:
+
+- **Case rail** (`src/case.py`) — a dovetail rail protruding from each
+  side wall's inner face into the (now genuinely open, not blind)
+  channel. Fixed.
+- **Intermediate rail** (`src/slide.py`) — a free-floating plate with a
+  dovetail groove on each face, spanning the *entire* channel budget
+  left after the outer wall (`slide_intermediate_thickness_mm()` =
+  `CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM` = 12 mm). This is what
+  makes full extension possible at all: without it, a 2-piece slide can
+  only extend the drawer until its own rail nears the end of the case's
+  groove — well short of fully clear.
+- **Drawer rail** (`src/drawer_box.py`) — a dovetail rail protruding
+  from the drawer box's own side wall, engaging the intermediate's
+  inner groove. First change ever made to `drawer_box.py` since it was
+  built.
+
+Both dovetail interfaces reuse `INTERLOCK_DOVETAIL_ANGLE_DEG` and
+`INTERLOCK_SLIDING_CLEARANCE_MM` — same kind of captured sliding joint
+as the interlock connector, not separately tuned. New STATED decisions:
+`SLIDE_RAIL_HEIGHT_MM` (**2 mm** engagement depth, each interface),
+`SLIDE_RAIL_ROOT_WIDTH_MM` (**6 mm**), `SLIDE_DRAWER_RAIL_LENGTH_MM`
+(**20 mm**, fixed, not scaled to case depth), `SLIDE_Y_MARGIN_MM` /
+`_Z_MARGIN_MM` (5 mm each). `slide_case_rail_length_mm()` and
+`slide_intermediate_length_mm()` (half of that) are FORMULAs, not
+independent numbers.
+
+**A real wrong turn, worth recording** (caught by the same fit-check
+method as the interlock and facer bugs, not by inspection): a groove's
+cross-section must match its rail's cross-section at every point along
+the shared axis — same taper direction, uniformly enlarged by
+clearance — using the *rail's own reference point*, not a point
+centered on the receiving part. The intermediate's groove references
+have to sit at the case rail's own base (x=0) and the drawer rail's own
+base (x=thickness), even though the drawer-side reference lands exactly
+on the plate's own boundary — not at some point chosen relative to the
+plate itself. A first draft (mirroring the interlock's own groove logic
+by instinct) got this wrong and showed real interference; the fix is
+in `tests/test_slide.py`, which also checks the drawer rail stays
+clear across its *entire* stage-1 travel range, not just one static
+position.
+
+**Simplifications, not fully engineered** (flagged, not silently
+skipped — both explicitly declined for this round when asked): no
+end-of-travel stop/catch tab forcing the stage-1-to-stage-2 handoff
+(the chosen lengths make a working slide possible, but nothing
+mechanically guarantees the intermediate starts moving at the ideal
+moment — in practice this relies on friction and/or care); no pull-out
+retention stop (the drawer can be pulled completely free once fully
+extended).
 
 ### Facer geometry (`src/facer.py`)
 

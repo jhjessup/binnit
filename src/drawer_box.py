@@ -2,9 +2,11 @@
 Drawer box generator.
 
 Builds a plain rectangular, open-top drawer box shell (four walls +
-floor) sized entirely from params/params.py. No fillets, no facer, no
-side channels — this is the first-pass shape; those come later as
-explicit decisions, not guesses.
+floor) sized entirely from params/params.py, plus (by default) each
+side's fixed slide rail — the drawer's own half of the 3-member
+telescoping slide mechanism (src/slide.py; see that module's docstring
+for the mechanism and the case's own half, src/case.py). No fillets,
+no facer — those are separate decisions/parts.
 
 Wall layout (asymmetric, per params.py):
   - side walls:  DRAWER_BOX_SIDE_WALL_MM on both the left and right
@@ -17,6 +19,14 @@ The front wall is not an independent input here: it falls out of
 outside_depth - interior_depth - back_wall, and params.py's own
 DRAWER_BOX_FRONT_WALL_MM is kept only as a reference figure to check
 against (see `_check_front_wall_consistency`).
+
+Slide rail placement: each rail protrudes from the drawer's own
+existing side wall OUTER FACE (local x=0 for the left side, x=
+outside_width for the right) — those faces are exactly where the case's
+channel expects to find them once the drawer is placed (case.py
+translates the drawer by CASE_SIDE_TOTAL_MM in X with no further
+offset), so no extra positioning math is needed here beyond picking
+which direction each rail points.
 """
 
 import sys
@@ -28,6 +38,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from build123d import Align, Box, Part, export_stl  # noqa: E402
 
 from params import params as P  # noqa: E402
+from src import slide  # noqa: E402
 
 
 def _check_front_wall_consistency(outside_depth: float, interior_depth: float,
@@ -45,12 +56,16 @@ def _check_front_wall_consistency(outside_depth: float, interior_depth: float,
     return implied_front_wall
 
 
-def drawer_box(size: str, depth_units: int, floors: int = 1) -> Part:
+def drawer_box(size: str, depth_units: int, floors: int = 1,
+               include_slide_rails: bool = True) -> Part:
     """Build a drawer box Part.
 
     size: one of "S", "M", "L", "XL" (params.SIZES key)
     depth_units: grid depth units (params.DEPTH_MIN_UNITS..DEPTH_MAX_UNITS)
     floors: one of params.FLOOR_COUNTS_OFFERED
+    include_slide_rails: attach each side's fixed slide rail
+        (src/slide.py), default True. False gives the plain shell,
+        useful for isolating other dimensions in a test.
     """
     if size not in P.SIZES:
         raise ValueError(f"Unknown size {size!r}; expected one of {list(P.SIZES)}")
@@ -80,7 +95,26 @@ def drawer_box(size: str, depth_units: int, floors: int = 1) -> Part:
                 align=(Align.MIN, Align.MIN, Align.MIN))
     inner = inner.translate((side_wall, back_wall, floor))
 
-    return outer - inner
+    result = outer - inner
+
+    if include_slide_rails:
+        rail_length = P.SLIDE_DRAWER_RAIL_LENGTH_MM
+        y_center = (outside_depth - rail_length) / 2.0
+        # z center matches the case's own cavity-based rail centering
+        # exactly: case.py centers its rail at cavity_z0 + cavity_height/2
+        # in case-global Z, and the drawer is placed with its own local
+        # z=0 AT cavity_z0 (flush at the cavity's bottom) — so the same
+        # center, expressed in the drawer's own local frame, is simply
+        # case_interior_height_mm(floors) / 2, with no cavity_z0 offset
+        # needed at all.
+        z_center = P.case_interior_height_mm(floors) / 2.0
+
+        left_rail = slide.rail(rail_length, direction=-1).translate((0, y_center, z_center))
+        right_rail = slide.rail(rail_length, direction=+1).translate(
+            (outside_width, y_center, z_center))
+        result = result + left_rail + right_rail
+
+    return result
 
 
 def main() -> Path:
