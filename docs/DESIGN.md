@@ -236,65 +236,100 @@ list names a Runner Guide, Runner Slide, and S Rail per drawer —
 language consistent with the classic 3-member telescoping pattern used
 in ball-bearing-free full-extension slides generally (wooden/plastic
 "Euro-style" slides use the same principle; it's generic engineering,
-not anyone's proprietary design). Binnit's own version:
+not anyone's proprietary design). Three members, current design:
 
-- **Case rail** (`src/case.py`) — a dovetail rail protruding from each
-  side wall's inner face into the (now genuinely open, not blind)
-  channel. Fixed.
-- **Intermediate rail** (`src/slide.py`) — a free-floating plate with a
-  dovetail groove on each face, spanning the *entire* channel budget
-  left after the outer wall (`slide_intermediate_thickness_mm()` =
-  `CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM` = 12 mm). This is what
-  makes full extension possible at all: without it, a 2-piece slide can
-  only extend the drawer until its own rail nears the end of the case's
-  groove — well short of fully clear.
-- **Drawer rail** (`src/drawer_box.py`) — a dovetail rail protruding
-  from the drawer box's own side wall, engaging the intermediate's
-  inner groove. First change ever made to `drawer_box.py` since it was
+- **Case** (`src/case.py`) — contributes NO added part. Its own
+  already-open channel (`_channel_open_cut`, bounded top and bottom by
+  its skins) directly serves as the outer capture. This went through
+  two earlier, more complicated versions (a dovetail rail, then a flat
+  tab) before the simplest version — just reuse the case's existing
+  geometry — was recognized as sufficient. See "History" below.
+- **Intermediate rail** (`src/slide.py`) — a free-floating plate: a
+  tall, plain OUTER portion sized to fit (with clearance) inside the
+  case's own channel opening (no feature of its own there), and a
+  built, flanged channel on its INNER face receiving the drawer's
+  rail. Makes full extension possible at all — without it, a 2-piece
+  slide can only extend the drawer until its own rail nears the end of
+  the case's channel, well short of fully clear.
+- **Drawer rail** (`src/drawer_box.py`) — a flat tab protruding from
+  the drawer box's own side wall, engaging the intermediate's inner
+  channel. First change ever made to `drawer_box.py` since it was
   built.
 
-Both dovetail interfaces reuse `INTERLOCK_DOVETAIL_ANGLE_DEG` and
-`INTERLOCK_SLIDING_CLEARANCE_MM` — same kind of captured sliding joint
-as the interlock connector, not separately tuned. New STATED decisions:
-`SLIDE_RAIL_HEIGHT_MM` (**4 mm** engagement depth, each interface),
-`SLIDE_RAIL_ROOT_WIDTH_MM` (**7 mm**), `SLIDE_DRAWER_RAIL_LENGTH_MM`
-(**20 mm**, fixed, not scaled to case depth), `SLIDE_Y_MARGIN_MM` /
-`_Z_MARGIN_MM` (5 mm each). `slide_case_rail_length_mm()` and
-`slide_intermediate_length_mm()` (half of that) are FORMULAs, not
-independent numbers.
+**Captured channel, not a dovetail** — the mechanism's current, and
+probably final, cross-section shape. A dovetail's 45° taper resists
+being pulled apart *along the insertion axis*, a direction that
+essentially never gets loaded in normal drawer use; what actually loads
+this joint is the drawer's **weight**, acting vertically, which a plain
+captured channel (a flat tab trapped between two flanges) resists just
+as completely, via simple wall containment — no taper needed. Two
+further, concrete wins: a channel's flanges are plain 90° walls (no
+overhang — a dovetail's wide end sits right at the ~45° limit most FDM
+printers can bridge without support), and insertion depth and capture
+width become **independent** dimensions (a dovetail's fixed angle locks
+wide-end spread to engagement height, so giving one interface more
+depth always balloons its footprint in lockstep; a channel has no such
+coupling).
 
-**Rebalanced once, for a reason worth recording**: the first pass used
-2 mm engagement and 6 mm root. Since `slide_intermediate_thickness_mm()`
-is fixed by the case and drawer walls' own positions (12 mm, not a free
-parameter), that spent only 1/3 of the budget on the two engagements
-that actually bear load and transfer motion, leaving 2/3 (8 mm) as an
-inert solid core holding the grooves apart and doing nothing else —
-noticed by comparing against how USSA Vault's own design allocates its
-cross-section (researched only in general terms — see this module's
-docstring — never copied). Doubling engagement height to 4 mm inverts
-that ratio (core drops to 4 mm/33%, engagement rises to 67%). Root
-width got a modest bump (6→7 mm) for bending strength at the root,
-deliberately not scaled 1:1 with the height increase — a taller tooth
-is already a longer lever arm (more prone to snapping under a sideways
-load), so piling on more width wasn't the point of this change.
-`src/slide.py`'s `intermediate_rail()` had its own latent bug here:
-the plate's Z-width used to default to `root + 6`, which silently
-clips the groove once the *wide end* (not root) exceeds that margin —
-true here the moment height grew independently of root. Fixed to size
-off the actual computed wide end of whichever groove is larger.
+That decoupling is what makes the depth split intentionally asymmetric:
+`SLIDE_DRAWER_ENGAGEMENT_DEPTH_MM` = **6 mm**, `SLIDE_CASE_...` doesn't
+exist as a separate number anymore — the case side needs no engagement
+depth of its own at all, since it adds no feature. The two interfaces
+don't see equal duty: the inner (drawer-side) channel does all the
+sliding work in ordinary use (the whole stage-1 range); the outer
+(case-side) capture only moves during stage 2 (full extension), which
+nothing currently guarantees even happens reliably (no stop/catch tab —
+see Simplifications below). The joint used constantly is the one worth
+making harder to wear loose, so it gets the depth.
 
-**A real wrong turn, worth recording** (caught by the same fit-check
-method as the interlock and facer bugs, not by inspection): a groove's
-cross-section must match its rail's cross-section at every point along
-the shared axis — same taper direction, uniformly enlarged by
-clearance — using the *rail's own reference point*, not a point
-centered on the receiving part. The intermediate's groove references
-have to sit at the case rail's own base (x=0) and the drawer rail's own
-base (x=thickness), even though the drawer-side reference lands exactly
-on the plate's own boundary — not at some point chosen relative to the
-plate itself. A first draft (mirroring the interlock's own groove logic
-by instinct) got this wrong and showed real interference; the fix is
-in `tests/test_slide.py`, which also checks the drawer rail stays
+STATED decisions: `SLIDE_CHANNEL_WIDTH_MM` (**10 mm**, Z-extent of the
+inner channel), `SLIDE_FLANGE_THICKNESS_MM` (**2 mm**, top/bottom
+capture), `SLIDE_DRAWER_ENGAGEMENT_DEPTH_MM` (**6 mm**),
+`SLIDE_INNER_CHANNEL_BACKING_MM` (**2 mm**, solid material behind the
+channel's own far wall), `SLIDE_DRAWER_RAIL_LENGTH_MM` (**20 mm**,
+fixed, not scaled to case depth), `SLIDE_Y_MARGIN_MM` / `_Z_MARGIN_MM`
+(5 mm each). FORMULAs, not independent numbers:
+`slide_intermediate_thickness_mm()` (fixed at 12 mm by the case and
+drawer walls' own positions — the real constraint that makes the depth
+trade-offs here meaningful rather than arbitrary), `slide_outer_portion_length_mm()`
+(whatever's left after the inner channel's depth and backing — 4 mm),
+`slide_tab_width_mm()`, `slide_case_channel_z_mm(floors)` and
+`slide_intermediate_z_height_mm(floors)` (the case's existing channel
+opening, and the intermediate's own height fit inside it with
+clearance), `slide_case_channel_length_mm()` / `slide_intermediate_length_mm()`
+(half of that).
+
+**History, worth keeping rather than quietly erasing** — this mechanism
+went through three real iterations in one session, each caught and
+explained rather than silently patched over:
+1. A dovetail cross-section, reused by default from the interlock
+   connector without checking whether that shape fit *this* load case.
+   It worked, but spent only 1/3 of the 12 mm budget on the engagements
+   that actually bear load, leaving 2/3 as an inert solid core — a
+   real weakness noticed by comparing against how Vault's own design
+   allocates its cross-section (general terms only, never copied).
+2. Rebalanced within the dovetail shape (engagement 2→4 mm, root
+   6→7 mm) — better, but exposed that the dovetail's fixed 45° angle
+   locks footprint to depth, so favoring one interface over the other
+   (the actual goal, once duty-cycle asymmetry was recognized) was
+   fighting the shape's own geometry rather than being served by it.
+   Also exposed a real bug: `intermediate_rail()`'s plate Z-width
+   defaulted to `root + 6`, silently clipping the groove once the
+   *wide end* (not root) exceeded that margin.
+3. Switched to a captured channel entirely, which resolved both: no
+   coupling between depth and footprint, and the dominant real load
+   (vertical sag) handled just as completely with a simpler, more
+   print-friendly shape. In the process, recognized the case didn't
+   need an added rail at all — its existing open channel already does
+   the job.
+
+A separate wrong turn worth recording too: in the dovetail version, a
+groove's cross-section had to match its rail's cross-section using the
+*rail's own reference point*, not a point centered on the receiving
+part — a first draft (mirroring the interlock's own groove logic by
+instinct) got this backwards and showed real interference, caught by
+the same fit-check method as the interlock and facer bugs, not by
+inspection. `tests/test_slide.py` also checks the drawer rail stays
 clear across its *entire* stage-1 travel range, not just one static
 position.
 

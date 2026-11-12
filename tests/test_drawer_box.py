@@ -38,8 +38,9 @@ def test_s_drawer_box_is_hollow():
 
 def test_slide_rails_protrude_past_the_nominal_width():
     # With rails (the default), the bounding box grows by
-    # SLIDE_RAIL_HEIGHT_MM on each side — the rails reach outward from
-    # the drawer's own side walls into the case's channel.
+    # SLIDE_DRAWER_ENGAGEMENT_DEPTH_MM on each side — the rails reach
+    # outward from the drawer's own side walls into the intermediate's
+    # channel.
     size, depth_units, floors = "S", 3, 1
     with_rails = drawer_box(size, depth_units, floors, include_slide_rails=True)
     without_rails = drawer_box(size, depth_units, floors, include_slide_rails=False)
@@ -47,7 +48,7 @@ def test_slide_rails_protrude_past_the_nominal_width():
     bb_with = with_rails.bounding_box()
     bb_without = without_rails.bounding_box()
 
-    expected_width = bb_without.size.X + 2.0 * P.SLIDE_RAIL_HEIGHT_MM
+    expected_width = bb_without.size.X + 2.0 * P.SLIDE_DRAWER_ENGAGEMENT_DEPTH_MM
     assert bb_with.size.X == pytest.approx(expected_width)
     # Y and Z are unaffected by the side rails.
     assert bb_with.size.Y == pytest.approx(bb_without.size.Y)

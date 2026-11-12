@@ -9,14 +9,17 @@ Axis convention (matches src/drawer_box.py): X=width, Y=depth (0=back,
 increasing toward the open front), Z=height.
 
 What's modeled:
-  - Side walls:  CASE_SIDE_TOTAL_MM on both left and right. Each gets a
-                 real dovetail RAIL (src/slide.py) protruding from its
-                 inner face into the open channel — the fixed member of
-                 a 3-piece telescoping slide, not a cosmetic relief
-                 pocket (an earlier version of this generator cut one;
-                 see src/slide.py's module docstring for why that
-                 changed). The channel itself is otherwise open to the
-                 cavity, not a blind pocket.
+  - Side walls:  CASE_SIDE_TOTAL_MM on both left and right, with the
+                 slide channel opened to the cavity (not a blind
+                 pocket). No rail or channel feature is ADDED here —
+                 the case contributes no part of its own to the slide
+                 mechanism beyond this open channel, which (bounded by
+                 its own skins, top and bottom) directly serves as the
+                 outer capture for the intermediate rail's plain outer
+                 portion. See src/slide.py's module docstring for why:
+                 an earlier version built a dovetail rail here, then a
+                 flat one, before realizing the case's own existing
+                 geometry already does this job without any addition.
   - Back wall:   CASE_BACK_WALL_MM (an ASSUMPTION in params.py, not measured)
   - Top/bottom
     skins:       CASE_TOP_BOTTOM_SKIN_MM each
@@ -27,8 +30,7 @@ What's modeled:
                  end-of-travel detent, unless include_connectors=False
 
 What's NOT modeled: the intermediate slide rail and the drawer's own
-rail are separate parts (src/slide.py, src/drawer_box.py) — this module
-only builds the case's half of the mechanism.
+rail are separate parts (src/slide.py, src/drawer_box.py).
 """
 
 import sys
@@ -40,7 +42,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from build123d import Align, Box, Part, Sphere, export_stl  # noqa: E402
 
 from params import params as P  # noqa: E402
-from src import facer, interlock, slide  # noqa: E402
+from src import facer, interlock  # noqa: E402
 
 
 def _check_interior_width_consistency(size: str) -> float:
@@ -81,22 +83,6 @@ def _channel_open_cut(outside_width: float, depth: float, cavity_y0: float,
     return channel.translate((x0, cavity_y0, cavity_z0))
 
 
-def _slide_case_rail(outside_width: float, depth_units: int, cavity_z0: float,
-                      cavity_height: float, left_side: bool) -> Part:
-    """One side's fixed slide rail (src/slide.py), protruding from the
-    side wall's inner face into the now-open channel. Centered
-    vertically within the CAVITY's own Z range (not the full shell —
-    the channel is only open there), inset from front/back by
-    SLIDE_Y_MARGIN_MM so it doesn't breach either opening. `left_side`
-    picks which face it protrudes from and which direction it points
-    (into the cavity either way)."""
-    length = P.slide_case_rail_length_mm(depth_units)
-    y0 = P.SLIDE_Y_MARGIN_MM
-    z_center = cavity_z0 + cavity_height / 2.0
-
-    r = slide.rail(length, direction=(1 if left_side else -1))
-    x0 = P.CASE_SIDE_OUTER_WALL_MM if left_side else outside_width - P.CASE_SIDE_OUTER_WALL_MM
-    return r.translate((x0, y0, z_center))
 
 
 def _latch_notch_cut(size: str, floors: int, side_wall: float,
@@ -118,7 +104,7 @@ def _latch_notch_cut(size: str, floors: int, side_wall: float,
 
 
 def case(size: str, depth_units: int, floors: int = 1,
-         include_connectors: bool = True, include_slide_rails: bool = True,
+         include_connectors: bool = True, include_slide_channel: bool = True,
          include_latch_notch: bool = True) -> Part:
     """Build a case Part.
 
@@ -128,9 +114,11 @@ def case(size: str, depth_units: int, floors: int = 1,
     include_connectors: attach the interlock rail/pad at every bay
         boundary (default True). False gives a plain shell, useful for
         isolating shell dimensions from connector geometry in a test.
-    include_slide_rails: attach each side's fixed slide rail
-        (src/slide.py), default True. False gives a plain open channel,
-        useful for isolating other dimensions in a test.
+    include_slide_channel: open the slide channel to the cavity (default
+        True) — this is the case's entire contribution to the slide
+        mechanism; no part is added (src/slide.py's module docstring
+        explains why). False leaves that region solid, useful for
+        isolating other dimensions in a test.
     include_latch_notch: cut the facer's matching latch notch into the
         top skin's front corner (default True).
     """
@@ -190,19 +178,13 @@ def case(size: str, depth_units: int, floors: int = 1,
 
     result = outer - cavity
 
-    if include_slide_rails:
+    if include_slide_channel:
         cavity_z0 = z_shell_bottom + skin
         left_open = _channel_open_cut(outside_width, depth, cavity_y0, cavity_z0,
                                        cavity_height, left_side=True)
         right_open = _channel_open_cut(outside_width, depth, cavity_y0, cavity_z0,
                                         cavity_height, left_side=False)
         result = result - left_open - right_open
-
-        left_rail = _slide_case_rail(outside_width, depth_units, cavity_z0,
-                                      cavity_height, left_side=True)
-        right_rail = _slide_case_rail(outside_width, depth_units, cavity_z0,
-                                       cavity_height, left_side=False)
-        result = result + left_rail + right_rail
 
     if include_connectors:
         for x in interlock.connector_line_x_positions(bays):

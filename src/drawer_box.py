@@ -109,9 +109,11 @@ def drawer_box(size: str, depth_units: int, floors: int = 1,
         # needed at all.
         z_center = P.case_interior_height_mm(floors) / 2.0
 
-        left_rail = slide.rail(rail_length, direction=-1).translate((0, y_center, z_center))
-        right_rail = slide.rail(rail_length, direction=+1).translate(
-            (outside_width, y_center, z_center))
+        engagement_depth = P.SLIDE_DRAWER_ENGAGEMENT_DEPTH_MM
+        left_rail = slide.rail(rail_length, direction=-1, depth_mm=engagement_depth)
+        left_rail = left_rail.translate((0, y_center, z_center))
+        right_rail = slide.rail(rail_length, direction=+1, depth_mm=engagement_depth)
+        right_rail = right_rail.translate((outside_width, y_center, z_center))
         result = result + left_rail + right_rail
 
     return result
