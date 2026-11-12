@@ -256,12 +256,32 @@ not anyone's proprietary design). Binnit's own version:
 Both dovetail interfaces reuse `INTERLOCK_DOVETAIL_ANGLE_DEG` and
 `INTERLOCK_SLIDING_CLEARANCE_MM` — same kind of captured sliding joint
 as the interlock connector, not separately tuned. New STATED decisions:
-`SLIDE_RAIL_HEIGHT_MM` (**2 mm** engagement depth, each interface),
-`SLIDE_RAIL_ROOT_WIDTH_MM` (**6 mm**), `SLIDE_DRAWER_RAIL_LENGTH_MM`
+`SLIDE_RAIL_HEIGHT_MM` (**4 mm** engagement depth, each interface),
+`SLIDE_RAIL_ROOT_WIDTH_MM` (**7 mm**), `SLIDE_DRAWER_RAIL_LENGTH_MM`
 (**20 mm**, fixed, not scaled to case depth), `SLIDE_Y_MARGIN_MM` /
 `_Z_MARGIN_MM` (5 mm each). `slide_case_rail_length_mm()` and
 `slide_intermediate_length_mm()` (half of that) are FORMULAs, not
 independent numbers.
+
+**Rebalanced once, for a reason worth recording**: the first pass used
+2 mm engagement and 6 mm root. Since `slide_intermediate_thickness_mm()`
+is fixed by the case and drawer walls' own positions (12 mm, not a free
+parameter), that spent only 1/3 of the budget on the two engagements
+that actually bear load and transfer motion, leaving 2/3 (8 mm) as an
+inert solid core holding the grooves apart and doing nothing else —
+noticed by comparing against how USSA Vault's own design allocates its
+cross-section (researched only in general terms — see this module's
+docstring — never copied). Doubling engagement height to 4 mm inverts
+that ratio (core drops to 4 mm/33%, engagement rises to 67%). Root
+width got a modest bump (6→7 mm) for bending strength at the root,
+deliberately not scaled 1:1 with the height increase — a taller tooth
+is already a longer lever arm (more prone to snapping under a sideways
+load), so piling on more width wasn't the point of this change.
+`src/slide.py`'s `intermediate_rail()` had its own latent bug here:
+the plate's Z-width used to default to `root + 6`, which silently
+clips the groove once the *wide end* (not root) exceeds that margin —
+true here the moment height grew independently of root. Fixed to size
+off the actual computed wide end of whichever groove is larger.
 
 **A real wrong turn, worth recording** (caught by the same fit-check
 method as the interlock and facer bugs, not by inspection): a groove's

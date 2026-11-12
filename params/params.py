@@ -167,15 +167,28 @@ CASE_SIDE_OUTER_WALL_MM = 3.0      # MEASURED (reference) — outer wall on the
 # intermediate<->drawer) uses the SAME angle and clearance already
 # established for the interlock connector (INTERLOCK_DOVETAIL_ANGLE_DEG,
 # INTERLOCK_SLIDING_CLEARANCE_MM) — reused, not duplicated, since it's
-# the same kind of captured sliding joint. Root width and engagement
-# height are new, STATED decisions sized to fit twice (plus the
-# intermediate's own solid core) inside the channel budget of
-# CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM = 12 mm: 2 mm engagement
-# each side leaves an 8 mm solid core in the intermediate rail — see
-# slide_intermediate_thickness_mm() below.
-SLIDE_RAIL_HEIGHT_MM = 2.0          # STATED decision — engagement depth,
+# the same kind of captured sliding joint.
+#
+# Root width and engagement height are STATED decisions, rebalanced
+# once: the first pass (height=2mm, root=6mm) spent only 1/3 of the
+# 12 mm channel budget (CASE_SIDE_TOTAL_MM - CASE_SIDE_OUTER_WALL_MM)
+# on the two engagements that actually bear load and transfer motion,
+# leaving 2/3 (8mm) as an inert solid core doing nothing but holding
+# the two grooves apart — noticed as a real weakness next to how USSA
+# Vault's own design (researched only in general terms — see
+# src/slide.py's docstring — never copied) allocates its cross-section.
+# The intermediate's own thickness is fixed by the case/drawer walls'
+# positions (slide_intermediate_thickness_mm() below), not a free
+# parameter, so the only lever that shrinks the wasted core is
+# engagement height itself — doubling it to 4mm inverts the ratio
+# (core drops from 8mm/67% to 4mm/33%). Root width got a modest bump
+# too, for bending strength at the root — kept modest rather than
+# matched 1:1 to the height increase, since a taller tooth is already
+# a longer lever arm (more prone to snapping under a sideways load),
+# and piling more width on top wasn't the point of this change.
+SLIDE_RAIL_HEIGHT_MM = 4.0          # STATED decision — engagement depth,
                                      # each of the two interfaces
-SLIDE_RAIL_ROOT_WIDTH_MM = 6.0      # STATED decision — narrow-end width
+SLIDE_RAIL_ROOT_WIDTH_MM = 7.0      # STATED decision — narrow-end width
 SLIDE_DRAWER_RAIL_LENGTH_MM = 20.0  # STATED decision — the drawer's own
                                      # rail is short and fixed-length,
                                      # not scaled to case depth

@@ -128,7 +128,15 @@ def intermediate_rail(length_mm: float, outer_root_width_mm: float | None = None
     angle_deg = P.INTERLOCK_DOVETAIL_ANGLE_DEG if angle_deg is None else angle_deg
     clearance_mm = P.INTERLOCK_SLIDING_CLEARANCE_MM if clearance_mm is None else clearance_mm
     thickness = P.slide_intermediate_thickness_mm()
-    z_width_mm = (P.SLIDE_RAIL_ROOT_WIDTH_MM + 6.0) if z_width_mm is None else z_width_mm
+    if z_width_mm is None:
+        # Must clear the WIDE end of whichever groove is larger — a
+        # fixed "root + constant" margin broke silently once root/height
+        # changed independently (the wide end can exceed root+6 well
+        # before root itself gets anywhere close to that), clipping the
+        # groove's cut and leaving an invalid, not-fully-enlarged cavity.
+        outer_wide = _dovetail_wide(outer_root_width_mm, outer_height_mm, angle_deg)
+        inner_wide = _dovetail_wide(inner_root_width_mm, inner_height_mm, angle_deg)
+        z_width_mm = max(outer_wide, inner_wide) + 4.0
 
     plate = Box(thickness, length_mm, z_width_mm,
                 align=(Align.MIN, Align.MIN, Align.CENTER))
