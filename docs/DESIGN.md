@@ -13,6 +13,33 @@ files (licensed) or from the popular Gridfinity derivatives (CC BY-NC-SA).
 A measured Vault L4 unit is used only as a *reference* for a handful of
 width-stack numbers, called out explicitly below as `MEASURED`.
 
+## Status (as of this pause point)
+
+**Built and tested:** drawer box (`src/drawer_box.py`), case
+(`src/case.py`), interlock stacking connector (`src/interlock.py`),
+facer with knob + latch (`src/facer.py`), the 3-member telescoping
+drawer slide (`src/slide.py`), and the oversized-part splitter
+(`src/split.py`). 65 tests, all passing; CI builds and uploads STLs on
+every PR. S and M sizes generated and verified; `tools/bench.html`
+loads the current S assembly for visual inspection.
+
+**Deliberately not built yet**, in rough order of how blocking they
+are:
+- **Insert** — the one component whose shape/role was never pinned
+  down (see Open items below); nothing to build until that's decided.
+- **L and XL sizes** — blocked on `SIZES["L"/"XL"].default_depth_units`
+  (Open items below); the depth-rounding rule was never resolved.
+- **Case↔split integration** — `src/split.py` exists and is tested in
+  isolation, but no generator calls it yet; L/XL cases will need it
+  once they exist (both exceed the print bed in width alone).
+- **Slide mechanism gaps**, both explicitly declined when asked, not
+  overlooked: no end-of-travel stop/catch tab forcing the stage
+  handoff (relies on friction), and no pull-out retention stop (a
+  fully-extended drawer can be pulled completely free).
+
+See "Open items" further down for the complete, current list of
+undecided `params.py` values.
+
 ## Provenance key
 
 Every dimension in `params.py` and in this document is tagged with how
